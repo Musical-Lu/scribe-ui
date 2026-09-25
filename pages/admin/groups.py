@@ -36,9 +36,7 @@ from utils.helpers import (
 )
 from utils.settings import get_settings
 from utils.token import (
-    get_admin_status,
     get_auth_header,
-    get_bofh_status,
 )
 from utils.group import Group
 
@@ -188,17 +186,17 @@ def admin_dialog(users: list, group_id: str) -> None:
 
 @ui.refreshable
 @ui.page("/admin/edit/{group_id}")
-def edit_group(group_id: str) -> None:
+async def edit_group(group_id: str) -> None:
     """
     Page to edit a group.
     """
-    page_init(use_drawer=True, title="Edit group")
+    user_data = await page_init(use_drawer=True, title="Edit group")
     # Plotly draws its charts in one theme's colours server-side and
     # cannot restyle itself, so this page reloads when the OS theme
     # changes. Only pages with charts do -- see reload_on_theme_change.
     reload_on_theme_change()
 
-    if not get_admin_status():
+    if not (user_data or {}).get("admin"):
         ui.navigate.to("/home")
         return
 
@@ -352,13 +350,13 @@ async def statistics(group_id: str) -> None:
     """
     Page to show statistics of a group with improved layout and design.
     """
-    page_init(use_drawer=True, title="Group statistics")
+    user_data = await page_init(use_drawer=True, title="Group statistics")
     # Plotly draws its charts in one theme's colours server-side and
     # cannot restyle itself, so this page reloads when the OS theme
     # changes. Only pages with charts do -- see reload_on_theme_change.
     reload_on_theme_change()
 
-    if not get_admin_status():
+    if not (user_data or {}).get("admin"):
         ui.navigate.to("/home")
         return
 
@@ -569,17 +567,17 @@ async def statistics(group_id: str) -> None:
 def create() -> None:
     @ui.refreshable
     @ui.page("/admin")
-    def admin() -> None:
+    async def admin() -> None:
         """
         Main page of the application.
         """
-        page_init(use_drawer=True, title="Groups")
+        user_data = await page_init(use_drawer=True, title="Groups")
         # Plotly draws its charts in one theme's colours server-side and
         # cannot restyle itself, so this page reloads when the OS theme
         # changes. Only pages with charts do -- see reload_on_theme_change.
         reload_on_theme_change()
 
-        if not get_admin_status():
+        if not (user_data or {}).get("admin"):
             ui.navigate.to("/home")
             return
 
@@ -656,7 +654,7 @@ def create() -> None:
                         quota_seconds=group["quota_seconds"],
                     )
 
-                    if get_bofh_status():
+                    if (user_data or {}).get("bofh"):
                         if customer_name not in expansions:
                             expansions[customer_name] = (
                                 ui.expansion(

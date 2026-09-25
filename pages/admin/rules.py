@@ -38,7 +38,6 @@ from utils.helpers import (
 )
 from utils.settings import get_settings
 from utils.token import (
-    get_admin_status,
     get_bofh_status,
     get_user_data,
 )
@@ -936,14 +935,14 @@ def _show_rules_help() -> None:
 
 
 @ui.page("/admin/rules")
-def rules_page() -> None:
+async def rules_page() -> None:
     """
     Onboarding management page.
     """
 
-    page_init(use_drawer=True, title="Provisioning rules")
+    user_data = await page_init(use_drawer=True, title="Provisioning rules")
 
-    if not get_admin_status():
+    if not (user_data or {}).get("admin"):
         ui.navigate.to("/home")
         return
 
@@ -1164,7 +1163,7 @@ def rules_page() -> None:
         rules_table.on("test_rule", handle_test)
         rules_table.on("delete_rule", handle_delete)
 
-    if get_bofh_status():
+    if (user_data or {}).get("bofh"):
         ui.separator().classes("mt-6 mb-4")
         with ui.row().style(
             "justify-content: space-between; align-items: center; width: 100%;"

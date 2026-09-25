@@ -30,7 +30,6 @@ from utils.common import page_init, reload_on_theme_change
 from utils.styles import default_styles, chart_colors
 from utils.settings import get_settings
 from utils.token import (
-    get_admin_status,
     get_auth_header,
 )
 
@@ -43,13 +42,13 @@ async def health() -> None:
     Health check dashboard displaying backend system metrics.
     """
 
-    page_init(use_drawer=True, title="System health")
+    user_data = await page_init(use_drawer=True, title="System health")
     # Plotly draws its charts in one theme's colours server-side and
     # cannot restyle itself, so this page reloads when the OS theme
     # changes. Only pages with charts do -- see reload_on_theme_change.
     reload_on_theme_change()
 
-    if not get_admin_status():
+    if not (user_data or {}).get("admin"):
         ui.navigate.to("/home")
         return
 

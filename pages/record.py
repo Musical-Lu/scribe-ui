@@ -38,7 +38,7 @@ settings = get_settings()
 
 def create() -> None:
     @ui.page("/record", reconnect_timeout=RECONNECT_TIMEOUT)
-    def record() -> None:
+    async def record() -> None:
         """
         Record a lecture with the device's microphone.
 
@@ -60,7 +60,7 @@ def create() -> None:
             else:
                 ui.navigate.to(settings.OIDC_APP_LOGOUT_ROUTE)
 
-        page_init(use_drawer=True, title="Recorder", on_session_end=session_ended)
+        await page_init(use_drawer=True, title="Recorder", on_session_end=session_ended)
 
         # Signed in, or nothing. Every other page is gated by page_init's
         # token refresh navigating to the logout route when it fails, a

@@ -34,9 +34,7 @@ from utils.helpers import (
 )
 from utils.settings import get_settings
 from utils.token import (
-    get_admin_status,
     get_auth_header,
-    get_bofh_status,
 )
 from utils.customer import Customer
 from pages.admin.shared import _get_valid_realms
@@ -223,13 +221,13 @@ def create_customer_dialog(page: callable) -> None:
 
 @ui.refreshable
 @ui.page("/admin/customers/edit/{customer_id}")
-def edit_customer(customer_id: str) -> None:
+async def edit_customer(customer_id: str) -> None:
     """
     Page to edit a customer.
     """
-    page_init(use_drawer=True, title="Edit customer")
+    user_data = await page_init(use_drawer=True, title="Edit customer")
 
-    if not get_admin_status():
+    if not (user_data or {}).get("admin"):
         ui.navigate.to("/home")
         return
 
@@ -396,13 +394,13 @@ def edit_customer(customer_id: str) -> None:
 
 
 @ui.page("/admin/customers")
-def customers() -> None:
+async def customers() -> None:
     """
     Customer management page.
     """
-    page_init(use_drawer=True, title="Customers")
+    user_data = await page_init(use_drawer=True, title="Customers")
 
-    if not get_admin_status():
+    if not (user_data or {}).get("admin"):
         ui.navigate.to("/home")
         return
 
@@ -412,15 +410,15 @@ def customers() -> None:
         "justify-content: space-between; align-items: center; width: 100%;"
     ):
         with ui.element("div").style("display: flex; gap: 0px;"):
-            if get_bofh_status():
+            if (user_data or {}).get("bofh"):
                 ui.label("Customers").classes("text-3xl font-bold")
-            elif get_admin_status():
+            elif (user_data or {}).get("admin"):
                 ui.label("Account information").classes("text-3xl font-bold")
             else:
                 pass
 
         with ui.element("div").style("display: flex; gap: 10px;"):
-            if get_bofh_status():
+            if (user_data or {}).get("bofh"):
                 create = (
                     ui.button("Create new customer")
                     .classes("default-style")
@@ -428,7 +426,7 @@ def customers() -> None:
                 )
                 create.on("click", lambda: create_customer_dialog(page=customers))
 
-            if get_bofh_status():
+            if (user_data or {}).get("bofh"):
                 # Billing covers every customer, so it is BOFH only. With two
                 # exports to choose from they go behind one menu rather than
                 # spreading buttons along the header.

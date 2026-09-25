@@ -145,7 +145,7 @@ VIDEO_TOP_SCRIPT = """
 
 def create() -> None:
     @ui.page("/view")
-    def view(
+    async def view(
         uuid: str, filename: str, model: str, language: str, data_format: str
     ) -> None:
         """
@@ -159,7 +159,7 @@ def create() -> None:
         no save.
         """
 
-        page_init(use_drawer=True, title="View transcription")
+        await page_init(use_drawer=True, title="View transcription")
 
         try:
             UUID(uuid)

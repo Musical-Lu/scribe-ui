@@ -36,7 +36,6 @@ from utils.helpers import (
 )
 from utils.settings import get_settings
 from utils.token import (
-    get_admin_status,
     get_auth_header,
 )
 
@@ -44,13 +43,13 @@ settings = get_settings()
 
 
 @ui.page("/admin/users")
-def users() -> None:
+async def users() -> None:
     """
     Page to show all users.
     """
-    page_init(use_drawer=True, title="Users")
+    user_data = await page_init(use_drawer=True, title="Users")
 
-    if not get_admin_status():
+    if not (user_data or {}).get("admin"):
         ui.navigate.to("/home")
         return
 

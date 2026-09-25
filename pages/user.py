@@ -26,7 +26,6 @@ from utils.helpers import (
     email_save_notifications_get,
 )
 from utils.settings import get_settings
-from utils.token import get_admin_status, get_user_data
 
 settings = get_settings()
 
@@ -53,12 +52,12 @@ def show_user_token() -> None:
 def create() -> None:
     @ui.refreshable
     @ui.page("/user")
-    def home() -> None:
+    async def home() -> None:
         """
         User page for managing user settings and information.
         """
-        page_init(use_drawer=True, title="User settings")
-        userdata = get_user_data()
+        user_data = await page_init(use_drawer=True, title="User settings")
+        userdata = user_data
 
         ui.add_head_html(default_styles)
         current_email = email_get()
@@ -283,7 +282,7 @@ def create() -> None:
                         "Get an email one day before your uploaded files are permanently deleted."
                     )
 
-                if get_admin_status():
+                if (user_data or {}).get("admin"):
                     with ui.column().classes("gap-1 mt-4"):
                         ui.label("Administration").classes(
                             "font-medium text-theme-secondary mb-1"

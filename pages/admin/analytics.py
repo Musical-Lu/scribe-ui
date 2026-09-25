@@ -30,9 +30,6 @@ from utils.common import page_init, reload_on_theme_change
 from utils.styles import default_styles, chart_colors
 from db.analytics import fetch_all as fetch_analytics
 from utils.settings import get_settings
-from utils.token import (
-    get_bofh_status,
-)
 
 settings = get_settings()
 
@@ -43,13 +40,13 @@ async def analytics() -> None:
     Page view analytics dashboard. BOFH only.
     """
 
-    page_init(use_drawer=True, title="Analytics")
+    user_data = await page_init(use_drawer=True, title="Analytics")
     # Plotly draws its charts in one theme's colours server-side and
     # cannot restyle itself, so this page reloads when the OS theme
     # changes. Only pages with charts do -- see reload_on_theme_change.
     reload_on_theme_change()
 
-    if not get_bofh_status():
+    if not (user_data or {}).get("bofh"):
         ui.navigate.to("/home")
         return
 

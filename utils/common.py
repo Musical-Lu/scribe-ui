@@ -25,10 +25,9 @@ from starlette.formparsers import MultiPartParser
 from typing import Callable, Optional
 from utils.settings import get_settings
 from utils.token import (
-    get_admin_status,
     get_auth_header,
-    get_bofh_status,
     get_user_data,
+    get_user_data_async,
     token_refresh_or_wait,
 )
 from utils.helpers import (
@@ -195,10 +194,9 @@ def logout() -> None:
     ui.navigate.to(settings.OIDC_APP_LOGOUT_ROUTE)
 
 
-def _show_announcement_banners() -> None:
+def _show_announcement_banners(user_data: dict | None) -> None:
     """Show active announcement banners below the header."""
 
-    user_data = get_user_data()
     if not user_data:
         return
 
@@ -317,14 +315,21 @@ def reload_on_theme_change() -> None:
     )
 
 
-def page_init(
+async def page_init(
     header_text: Optional[str] = "",
     use_drawer: bool = False,
     title: str = "",
     on_session_end: Optional[Callable[[], None]] = None,
-) -> None:
+) -> dict | None:
     """
     Initialize the page with a header and background color.
+
+    Returns the signed-in user's data (GET /me), asked once per page load
+    and without blocking the event loop -- it used to be asked three or four
+    times, synchronously, stalling every connected user each time.  Pages
+    gate on it (``(user_data or {}).get("admin")``) rather than asking
+    again; it is as fresh as the page itself, exactly as the separate calls
+    were.  None when it could not be had, which every gate treats as "no".
 
     :param on_session_end: called instead of navigating to the logout route
         when the sign-in is refused. For a page where leaving would destroy
@@ -346,7 +351,7 @@ def page_init(
 
     if "_scribe_bk" not in app.storage.browser:
         ui.navigate.to("/")
-        return
+        return None
 
     # How many refreshes in a row have failed to reach the provider. A blip,
     # a suspended laptop or a provider restart is not a session that has
@@ -393,8 +398,9 @@ def page_init(
     if dark_pref is not None:
         app.storage.user["_resolved_dark"] = bool(dark_pref)
 
-    is_admin = get_admin_status()
-    is_bofh = get_bofh_status()
+    user_data = await get_user_data_async()
+    is_admin = bool((user_data or {}).get("admin"))
+    is_bofh = bool((user_data or {}).get("bofh"))
     ui.timer(30, refresh)
 
     try:
@@ -865,7 +871,9 @@ def page_init(
             """
         )
 
-    _show_announcement_banners()
+    _show_announcement_banners(user_data)
+
+    return user_data
 
 
 def add_timezone_to_timestamp(timestamp: str) -> str:

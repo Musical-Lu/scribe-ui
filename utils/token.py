@@ -234,6 +234,26 @@ def get_user_data() -> dict:
         return None
 
 
+async def get_user_data_async() -> dict | None:
+    """
+    get_user_data, without blocking the event loop.  Every page load asks
+    for it (page_init); the synchronous version stalled every connected
+    user for the length of the request.
+    """
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            response = await client.get(
+                f"{settings.API_URL}/api/v1/me", headers=get_auth_header()
+            )
+            response.raise_for_status()
+
+        return response.json()["result"]
+
+    except (httpx.HTTPError, ValueError, KeyError, TypeError):
+        return None
+
+
 def get_admin_status() -> bool:
     """
     Check if the user is an admin based on the token.

@@ -54,13 +54,13 @@ def create() -> None:
     # is enough at the default 15 seconds. Five minutes covers those without
     # keeping abandoned editors alive for long.
     @ui.page("/srt", reconnect_timeout=300)
-    def result(
+    async def result(
         uuid: str, filename: str, model: str, language: str, data_format: str
     ) -> None:
         """
         Display the result of the transcription job.
         """
-        page_init(use_drawer=True, title="Editor")
+        await page_init(use_drawer=True, title="Editor")
 
         try:
             UUID(uuid)

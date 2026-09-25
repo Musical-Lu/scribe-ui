@@ -34,11 +34,11 @@ from utils.styles import default_styles, jobs_columns
 def create() -> None:
     @ui.refreshable
     @ui.page("/home")
-    def home() -> None:
+    async def home() -> None:
         """
         Main page of the application.
         """
-        page_init(use_drawer=True, title="My files")
+        await page_init(use_drawer=True, title="My files")
 
         # Recordings left on this device -- a recorder closed before its
         # upload finished, a phone that went offline -- are resumed from

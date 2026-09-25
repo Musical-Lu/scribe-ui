@@ -33,9 +33,6 @@ from utils.helpers import (
     announcement_delete,
 )
 from utils.settings import get_settings
-from utils.token import (
-    get_bofh_status,
-)
 
 settings = get_settings()
 
@@ -343,12 +340,12 @@ def _announcement_delete_confirm(ann: dict) -> None:
 
 
 @ui.page("/admin/announcements")
-def announcements_page() -> None:
+async def announcements_page() -> None:
     """Announcement banner management page. BOFH only."""
 
-    page_init(use_drawer=True, title="Announcements")
+    user_data = await page_init(use_drawer=True, title="Announcements")
 
-    if not get_bofh_status():
+    if not (user_data or {}).get("bofh"):
         ui.navigate.to("/home")
         return
 
