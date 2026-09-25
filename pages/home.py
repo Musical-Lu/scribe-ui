@@ -293,6 +293,16 @@ def create() -> None:
                         <q-icon name="mic" size="14px" aria-hidden="true" />
                         Recording
                     </q-badge>
+                    <!-- The label's room, kept in every other row too, so a
+                         name is cut at the same length with or without it. -->
+                    <q-badge
+                        v-else
+                        class="jobs-recording-badge jobs-recording-badge-placeholder"
+                        aria-hidden="true"
+                    >
+                        <q-icon name="mic" size="14px" />
+                        Recording
+                    </q-badge>
                 </div>
             </q-td>
             """,

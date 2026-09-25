@@ -424,7 +424,9 @@ def test_my_files_marks_recordings_and_exports_their_original():
     home = (ROOT / "pages" / "home.py").read_text()
     common = (ROOT / "utils" / "common.py").read_text()
     assert '"is_recording": bool(job.get("has_original"))' in common
-    assert home.count("jobs-recording-badge") == 2, "table and card"
+    assert home.count('class="jobs-recording-badge"') == 2, "table and card"
+    # Rows without the label keep its room, so names truncate alike.
+    assert "jobs-recording-badge-placeholder" in home
     # No per-row download: the original is part of Export.
     assert "Download original" not in home
     assert "ORIGINAL_PREFIX" not in home

@@ -756,6 +756,9 @@ theme_styles = """
         gap: 0.75rem;
         min-width: 0;
     }
+    .jobs-recording-badge-placeholder {
+        visibility: hidden;
+    }
     .jobs-filename-text {
         min-width: 0;
         overflow: hidden;
