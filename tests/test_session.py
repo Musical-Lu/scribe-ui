@@ -232,3 +232,20 @@ class TestThemeReloadIsOnlyForCharts:
 
     def test_the_editor_does_not(self):
         assert "reload_on_theme_change" not in pathlib.Path("pages/srt.py").read_text()
+
+
+def test_page_init_awaits_before_starting_any_timer():
+    # A timer waits for the browser to connect, and NiceGUI sends the page
+    # as soon as anything does: with one already running during page_init's
+    # await, the page went out half-built and the recorder engine's <script>
+    # (added after page_init) arrived over the socket, where it never runs.
+    import inspect
+
+    from utils.common import page_init
+
+    source = inspect.getsource(page_init)
+    first_await = source.index("await get_user_data_async()")
+    first_timer = source.index("ui.timer(")
+
+    assert first_await < first_timer
+    assert source.count("await get_user_data_async()") == 1

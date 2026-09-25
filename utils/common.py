@@ -353,6 +353,15 @@ async def page_init(
         ui.navigate.to("/")
         return None
 
+    # The one await, and it has to come before anything that starts a timer
+    # (the token refresh below).  A timer waits for the browser to connect,
+    # and NiceGUI sends the page the moment anything does -- so a timer
+    # already running during this await sent the page half-built, and
+    # whatever the page added after page_init reached the browser over the
+    # socket instead.  A <script> in the head arriving that way is never
+    # run: the recorder engine was one ("The recorder did not load").
+    user_data = await get_user_data_async()
+
     # How many refreshes in a row have failed to reach the provider. A blip,
     # a suspended laptop or a provider restart is not a session that has
     # ended, and treating it as one logs the reader out mid-edit -- which on
@@ -398,7 +407,6 @@ async def page_init(
     if dark_pref is not None:
         app.storage.user["_resolved_dark"] = bool(dark_pref)
 
-    user_data = await get_user_data_async()
     is_admin = bool((user_data or {}).get("admin"))
     is_bofh = bool((user_data or {}).get("bofh"))
     ui.timer(30, refresh)
