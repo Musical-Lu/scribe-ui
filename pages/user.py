@@ -25,9 +25,100 @@ from utils.helpers import (
     email_save_notifications,
     email_save_notifications_get,
 )
+from utils.drive import (
+    display_name as drive_display_name,
+    drive_disconnect,
+    drive_set_instance,
+    drive_status,
+)
 from utils.settings import get_settings
 
 settings = get_settings()
+
+
+async def draw_drive_section(section: ui.column) -> None:
+    """
+    The reader's Sunet Drive settings: which instance to use, and whether
+    Scribe is connected to it. Drawn only when their organisation offers
+    Drive at all -- nothing about Drive is shown otherwise.
+
+    The instance is the reader's own choice; left empty, their
+    organisation's is used. The backend only accepts Sunet Drive
+    addresses.
+    """
+
+    status = await drive_status()
+    if not status.ok or not status.result.get("enabled"):
+        return
+
+    info = status.result
+    name = drive_display_name(info)
+    org_instance = info.get("org_instance") or ""
+
+    section.clear()
+    with section:
+        ui.label(name).classes("text-lg font-semibold mb-2")
+        ui.separator()
+
+        with ui.column().classes("gap-2 mt-2 mb-6 w-full"):
+            with ui.row().classes("items-center gap-3"):
+                ui.icon("cloud").style("font-size: 20px;").props("aria-hidden=true")
+                address = (
+                    ui.input(
+                        f"Your {name} address",
+                        value=info.get("user_instance") or "",
+                        placeholder=org_instance or "https://<organisation>.drive.sunet.se",
+                    )
+                    .props("type=url autocomplete=url")
+                    .style("min-width: 300px;")
+                )
+                save = ui.button("Save")
+                save.props("color=black flat")
+                save.classes("default-style")
+
+            ui.label(
+                f"Leave empty to use your organisation's: {org_instance}"
+                if org_instance
+                else f"Your organisation has not set a {name}; enter yours here."
+            ).classes("text-sm text-theme-muted")
+
+            with ui.row().classes("items-center gap-3"):
+                state = ui.label("").classes("text-theme-secondary").props(
+                    "role=status aria-live=polite"
+                )
+                disconnect = ui.button("Disconnect", icon="link_off")
+                disconnect.props("color=black flat")
+                disconnect.classes("delete-style")
+
+    def show_state(connected: bool) -> None:
+        state.set_text(
+            f"Connected to {name}." if connected else f"Not connected to {name}."
+        )
+        disconnect.set_visibility(connected)
+
+    async def save_address() -> None:
+        result = await drive_set_instance(address.value)
+        if not result.ok:
+            message = result.error.replace('"', "'")
+            address.props(f'error error-message="{message}"')
+            address.run_method("focus")
+            return
+        address.props(remove="error error-message")
+        ui.notify(f"{name} address saved", type="positive")
+        refreshed = await drive_status()
+        show_state(bool(refreshed.ok and refreshed.result.get("connected")))
+
+    async def do_disconnect() -> None:
+        result = await drive_disconnect()
+        if not result.ok:
+            ui.notify(result.error, type="negative", timeout=None, close_button="Close")
+            return
+        ui.notify(f"Disconnected from {name}", type="positive")
+        show_state(False)
+
+    save.on("click", save_address)
+    disconnect.on("click", do_disconnect)
+    show_state(bool(info.get("connected")))
 
 
 def show_user_token() -> None:
@@ -224,6 +315,12 @@ def create() -> None:
                     ).props("toggle-color=primary no-caps").tooltip(
                         "Light: always light, Dark: always dark, Auto: follow system settings."
                     )
+
+                # -- Sunet Drive section, when the organisation offers it --
+                drive_section = ui.column().classes("w-full gap-0")
+                ui.timer(
+                    0.0, lambda: draw_drive_section(drive_section), once=True
+                )
 
             # ── Right column: Notifications ──
             with ui.column().classes("flex-1"):

@@ -27,6 +27,8 @@ from utils.common import (
     table_bulk_export,
     table_bulk_transcribe,
 )
+from utils.drive import display_name, drive_status
+from utils.drive_dialogs import get_from_drive
 from utils.recorder import RecorderReminder, current_owner, engine_script
 from utils.styles import default_styles, jobs_columns
 
@@ -400,6 +402,19 @@ def create() -> None:
                     upload.classes("default-style")
                     upload.on("click", lambda: table_upload(table))
 
+                # Get from Sunet Drive (SUNET/scribe-backend#64). Hidden
+                # until the backend says Drive is offered to this reader's
+                # organisation, and then named the way the organisation
+                # names its Drive.
+                get_from_drive_button = ui.button(
+                    "Get from Drive", icon="cloud_download"
+                ).props("color=black flat")
+                get_from_drive_button.classes("default-style jobs-action-wide")
+                get_from_drive_button.on(
+                    "click", lambda: get_from_drive(on_imported=update_rows)
+                )
+                get_from_drive_button.set_visibility(False)
+
         async def update_rows():
             """
             Update the rows in the table.
@@ -437,8 +452,17 @@ def create() -> None:
 
         reminder.on("uploaded", recording_arrived)
 
+        async def show_drive() -> None:
+            status = await drive_status()
+            if status.ok and status.result.get("enabled"):
+                get_from_drive_button.set_text(
+                    f"Get from {display_name(status.result)}"
+                )
+                get_from_drive_button.set_visibility(True)
+
         async def initial_load():
             poll_timer.activate()
             await update_rows()
+            await show_drive()
 
         ui.timer(0.0, initial_load, once=True)

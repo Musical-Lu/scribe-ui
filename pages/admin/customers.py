@@ -42,6 +42,59 @@ from pages.admin.shared import _get_valid_realms
 settings = get_settings()
 
 
+def drive_fields(customer: dict | None = None) -> tuple:
+    """
+    The Sunet Drive settings of a customer (SUNET/scribe-backend#64):
+    whether Drive is offered to its users at all, which instance they use
+    unless they choose their own, and what the organisation calls it. The
+    backend only accepts Sunet Drive addresses for the instance.
+
+    Returns:
+        tuple: (enabled switch, instance input, display name input).
+    """
+
+    customer = customer or {}
+
+    ui.label("Sunet Drive").classes("text-lg font-semibold mt-2")
+    enabled = ui.switch(
+        "Offer Get from / Save to Drive to this customer's users",
+        value=bool(customer.get("drive_enabled")),
+    )
+    instance = (
+        ui.input(
+            "Drive instance",
+            value=customer.get("drive_url") or "",
+            placeholder="https://<organisation>.drive.sunet.se",
+        )
+        .classes("w-full")
+        .props(
+            'outlined type=url hint="Used unless a user chooses their own. '
+            'Leave empty to let every user choose."'
+        )
+    )
+    display = (
+        ui.input(
+            "Drive display name",
+            value=customer.get("drive_display_name") or "",
+            placeholder="Sunet Drive",
+        )
+        .classes("w-full")
+        .props(
+            'outlined maxlength=64 hint="What the organisation calls its Drive, '
+            'e.g. in Get from ... and Save to ...  Empty means Sunet Drive."'
+        )
+    )
+
+    def update() -> None:
+        instance.set_visibility(enabled.value)
+        display.set_visibility(enabled.value)
+
+    enabled.on_value_change(lambda _: update())
+    update()
+
+    return enabled, instance, display
+
+
 def create_customer_dialog(page: callable) -> None:
     ui.dark_mode(app.storage.user.get("dark_mode", None))
     realms = _get_valid_realms()
@@ -112,6 +165,8 @@ def create_customer_dialog(page: callable) -> None:
                 .classes("w-full")
                 .props("outlined")
             )
+
+            drive_enabled, drive_url_input, drive_name_input = drive_fields()
 
             notes_input = ui.textarea("Notes").classes("w-full").props("outlined")
 
@@ -191,6 +246,9 @@ def create_customer_dialog(page: callable) -> None:
                                 "blocks_purchased": blocks_val,
                                 "realms": realms_str,
                                 "notes": notes_input.value,
+                                "drive_enabled": drive_enabled.value,
+                                "drive_url": drive_url_input.value.strip(),
+                                "drive_display_name": drive_name_input.value.strip(),
                             },
                         )
 
@@ -337,13 +395,15 @@ async def edit_customer(customer_id: str) -> None:
                 .props("outlined")
             )
 
+            drive_enabled, drive_url_input, drive_name_input = drive_fields(customer)
+
             notes_input = (
                 ui.textarea("Notes", value=customer.get("notes", ""))
                 .classes("w-full")
                 .props("outlined")
             )
 
-    def do_save() -> None:
+    async def do_save() -> None:
         # save_customer's own int(base_fee) raised a bare, unshown ValueError
         # on anything int() rejects (a decimal like "12.5", which the
         # browser's type=number spinner accepts without complaint). Same
@@ -367,7 +427,7 @@ async def edit_customer(customer_id: str) -> None:
             return
         blocks_input.props(remove="error error-message")
 
-        save_customer(
+        error = await save_customer(
             customer_abbr_input.value,
             customer_id,
             partner_id_input.value,
@@ -380,7 +440,25 @@ async def edit_customer(customer_id: str) -> None:
             new_realms_input.value,
             notes_input.value,
             blocks_input.value,
+            drive_enabled=drive_enabled.value,
+            drive_url=drive_url_input.value.strip(),
+            drive_display_name=drive_name_input.value.strip(),
         )
+
+        # The one field the backend itself refuses: an address that is not
+        # a Sunet Drive instance. Same field/focus treatment as above.
+        if error and "Drive" in error:
+            drive_url_input.props(f'error error-message="{error.replace(chr(34), chr(39))}"')
+            drive_url_input.run_method("focus")
+        elif error:
+            ui.notify(
+                f"Error saving customer: {error}",
+                type="negative",
+                timeout=None,
+                close_button="Close",
+            )
+        else:
+            ui.navigate.to("/admin/customers")
 
     with ui.row().style(
         "justify-content: flex-end; width: 100%; padding: 16px; gap: 8px;"
@@ -486,5 +564,8 @@ async def customers() -> None:
                 stats=customer.get("stats", {}),
                 blocks_purchased=customer.get("blocks_purchased", 0),
                 base_fee=customer["base_fee"],
+                drive_enabled=bool(customer.get("drive_enabled")),
+                drive_url=customer.get("drive_url"),
+                drive_display_name=customer.get("drive_display_name"),
             )
             c.create_card()

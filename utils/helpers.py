@@ -269,7 +269,7 @@ def export_billing_data() -> None:
     )
 
 
-def save_customer(
+async def save_customer(
     customber_abbr: str,
     customer_id: str,
     partner_id: str,
@@ -282,33 +282,55 @@ def save_customer(
     new_realms: str,
     notes: str,
     blocks_purchased: int,
-) -> None:
+    drive_enabled: bool = False,
+    drive_url: str = "",
+    drive_display_name: str = "",
+) -> str | None:
+    """
+    Save a customer.
+
+    Returns:
+        str | None: None when saved; otherwise the reason, the backend's
+            own message when it gave one. Navigating away on success is the
+            caller's -- it can then keep the page when a field was refused.
+    """
+
     # Combine selected and new realms
     new_realm_list = [r.strip() for r in new_realms.split(",") if r.strip()]
     all_realms = list(set(selected_realms + new_realm_list))
     realms_str = ",".join(all_realms)
 
     try:
-        res = httpx.put(
-            settings.API_URL + f"/api/v1/admin/customers/{customer_id}",
-            headers=get_auth_header(),
-            json={
-                "customer_abbr": customber_abbr,
-                "partner_id": partner_id,
-                "name": name,
-                "contact_email": contact_email,
-                "support_contact_email": support_contact_email,
-                "priceplan": priceplan,
-                "base_fee": int(base_fee) if base_fee else 0,
-                "realms": realms_str,
-                "notes": notes,
-                "blocks_purchased": int(blocks_purchased) if blocks_purchased else 0,
-            },
-        )
-        res.raise_for_status()
-        ui.navigate.to("/admin/customers")
+        async with httpx.AsyncClient(timeout=30) as client:
+            res = await client.put(
+                settings.API_URL + f"/api/v1/admin/customers/{customer_id}",
+                headers=get_auth_header(),
+                json={
+                    "customer_abbr": customber_abbr,
+                    "partner_id": partner_id,
+                    "name": name,
+                    "contact_email": contact_email,
+                    "support_contact_email": support_contact_email,
+                    "priceplan": priceplan,
+                    "base_fee": int(base_fee) if base_fee else 0,
+                    "realms": realms_str,
+                    "notes": notes,
+                    "blocks_purchased": int(blocks_purchased) if blocks_purchased else 0,
+                    "drive_enabled": bool(drive_enabled),
+                    "drive_url": drive_url,
+                    "drive_display_name": drive_display_name,
+                },
+            )
     except httpx.HTTPError as e:
-        ui.notify(f"Error saving customer: {e}", type="negative", timeout=None, close_button="Close")
+        return str(e)
+
+    if res.is_success:
+        return None
+
+    try:
+        return res.json().get("error") or f"HTTP {res.status_code}"
+    except ValueError:
+        return f"HTTP {res.status_code}"
 
 
 def customers_get() -> list:

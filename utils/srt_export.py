@@ -30,6 +30,8 @@ from nicegui import ui
 
 from urllib.parse import quote
 
+from utils.drive import display_name as drive_display_name, drive_status
+from utils.drive_dialogs import save_to_drive
 from utils.helpers import sanitize_filename
 from utils.recording_api import ORIGINAL_PREFIX
 from utils.settings import get_settings
@@ -900,7 +902,7 @@ class ExportMixin:
                             "outline color=black"
                         )
 
-                        def exp():
+                        async def exp(to_drive: bool = False):
                             try:
 
                                 def fmt_ts(ts, f):
@@ -1116,54 +1118,99 @@ class ExportMixin:
                                         )
                                     return c
 
+                                # One list of (name, content) for both
+                                # destinations: a download zips it (or not,
+                                # for one file); Drive takes each file as
+                                # its own, which is what a folder is for.
+                                chosen_fmt = fmt.value
                                 if is_bulk:
-                                    zip_buffer = io.BytesIO()
-                                    chosen_fmt = fmt.value
+                                    files = []
                                     seen_names = {}
 
-                                    with zipfile.ZipFile(
-                                        zip_buffer, "w", zipfile.ZIP_DEFLATED
-                                    ) as zf:
-                                        for bfn, beditor in bulk_editors:
-                                            content = export_one(beditor)
-                                            base_name = f"{Path(bfn).stem}.{chosen_fmt}"
+                                    for bfn, beditor in bulk_editors:
+                                        content = export_one(beditor)
+                                        base_name = f"{Path(bfn).stem}.{chosen_fmt}"
 
-                                            if base_name in seen_names:
-                                                seen_names[base_name] += 1
-                                                base_name = f"{Path(bfn).stem}_{seen_names[base_name]}.{chosen_fmt}"
-                                            else:
-                                                seen_names[base_name] = 0
+                                        if base_name in seen_names:
+                                            seen_names[base_name] += 1
+                                            base_name = f"{Path(bfn).stem}_{seen_names[base_name]}.{chosen_fmt}"
+                                        else:
+                                            seen_names[base_name] = 0
 
-                                            zf.writestr(base_name, content)
-
-                                    ui.download(
-                                        zip_buffer.getvalue(),
-                                        filename="bulk_export.zip",
-                                    )
-
-                                    ui.notify(
-                                        f"Exported {len(bulk_editors)} files as {chosen_fmt.upper()}",
-                                        type="positive",
-                                    )
+                                        files.append((base_name, content.encode("utf-8")))
                                 else:
-                                    c = export_one(self)
-                                    ui.download(
-                                        c.encode("utf-8"),
-                                        filename=f"{Path(filename).stem}.{fmt.value}",
-                                    )
-
-                                    ui.notify(
-                                        f"Exported as {fmt.value.upper()}",
-                                        type="positive",
-                                    )
+                                    files = [
+                                        (
+                                            f"{Path(filename).stem}.{chosen_fmt}",
+                                            export_one(self).encode("utf-8"),
+                                        )
+                                    ]
                             except Exception as e:
                                 ui.notify(f"Export failed: {str(e)}", type="negative", timeout=None, close_button="Close")
                                 return
 
+                            if to_drive:
+                                # Originals are not sent: they are encrypted
+                                # for the reader in Scribe and only open
+                                # through their own download.
+                                await save_to_drive(files)
+                                return
+
+                            if is_bulk:
+                                zip_buffer = io.BytesIO()
+
+                                with zipfile.ZipFile(
+                                    zip_buffer, "w", zipfile.ZIP_DEFLATED
+                                ) as zf:
+                                    for base_name, content in files:
+                                        zf.writestr(base_name, content)
+
+                                ui.download(
+                                    zip_buffer.getvalue(),
+                                    filename="bulk_export.zip",
+                                )
+
+                                ui.notify(
+                                    f"Exported {len(files)} files as {chosen_fmt.upper()}",
+                                    type="positive",
+                                )
+                            else:
+                                ui.download(files[0][1], filename=files[0][0])
+
+                                ui.notify(
+                                    f"Exported as {chosen_fmt.upper()}",
+                                    type="positive",
+                                )
+
                             if include_originals is not None and include_originals.value:
                                 download_originals(originals)
 
-                        ui.button("Export", icon="download", on_click=exp).props(
+                        # Save to Sunet Drive (SUNET/scribe-backend#64):
+                        # hidden until the backend says Drive is offered to
+                        # this reader, and named as their organisation
+                        # names it.
+                        drive_button = (
+                            ui.button(
+                                "Save to Drive",
+                                icon="cloud_upload",
+                                on_click=lambda: exp(to_drive=True),
+                            )
+                            .props("flat color=black")
+                            .classes("default-style")
+                        )
+                        drive_button.set_visibility(False)
+
+                        async def show_drive() -> None:
+                            status = await drive_status()
+                            if status.ok and status.result.get("enabled"):
+                                drive_button.set_text(
+                                    f"Save to {drive_display_name(status.result)}"
+                                )
+                                drive_button.set_visibility(True)
+
+                        ui.timer(0.0, show_drive, once=True)
+
+                        ui.button("Export", icon="download", on_click=lambda: exp()).props(
                             "flat color=white"
                         ).classes("button-default-style")
 

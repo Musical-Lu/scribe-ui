@@ -2354,6 +2354,12 @@ theme_styles = """
             min-width: 0;
             min-height: 44px;
         }
+        /* "Get from <Drive>" is a fifth action, shown only where Drive is
+           offered: a row of its own under the two by two, rather than a
+           cell alone with an empty one beside it. */
+        .jobs-actions .jobs-action-wide {
+            grid-column: 1 / -1;
+        }
 
         /* Rows are cards here (see the table's `grid` prop), so the strip
            of column headings and the fixed table height have nothing left

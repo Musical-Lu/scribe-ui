@@ -40,6 +40,9 @@ class Customer:
         created_at: str,
         stats: dict,
         blocks_purchased: int = 0,
+        drive_enabled: bool = False,
+        drive_url: str | None = None,
+        drive_display_name: str | None = None,
     ) -> None:
         self.customer_abbr = customer_abbr
         self.customer_id = customer_id
@@ -54,6 +57,9 @@ class Customer:
         self.created_at = created_at.split(".")[0]
         self.stats = stats
         self.blocks_purchased = blocks_purchased
+        self.drive_enabled = drive_enabled
+        self.drive_url = drive_url
+        self.drive_display_name = drive_display_name
 
         if isinstance(self.base_fee, tuple):
             self.base_fee = self.base_fee[0]
@@ -80,6 +86,10 @@ class Customer:
                         ui.label(f"Kaltura Partner ID: {self.partner_id}").classes(
                             "text-md"
                         )
+                    if self.drive_enabled:
+                        drive = self.drive_display_name or "Sunet Drive"
+                        where = self.drive_url or "chosen by each user"
+                        ui.label(f"{drive}: {where}").classes("text-md")
                     ui.label(f"Plan: {self.priceplan.capitalize()}").classes(
                         "text-sm text-theme-muted"
                     )
