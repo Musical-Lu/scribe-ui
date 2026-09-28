@@ -342,5 +342,5 @@ class SearchMixin:
             self.search_container.open()
         else:
             ui.button("Search", icon="search").props("flat").classes(
-                "editor-btn editor-toolbar-btn"
+                "editor-btn editor-toolbar-btn editor-quiet"
             ).on("click", lambda: self.search_container.open())

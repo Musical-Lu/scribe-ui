@@ -756,8 +756,10 @@ class TestInformationDialog:
     def test_a_button_opens_it(self):
         page = self.page()
 
-        assert 'ui.button("Info", icon="info")' in page
-        assert '.on("click", info_dialog.open)' in page
+        # An icon in toolbar design A, named for screen readers and on hover.
+        assert 'ui.button(icon="info")' in page
+        assert 'aria-label="Information"' in page
+        assert '"click", info_dialog.open' in page
 
     def test_it_names_what_it_shows(self):
         """

@@ -504,6 +504,9 @@ class RenderMixin:
         if open_window:
             dialog.open()
         else:
-            ui.button("Shortcuts", icon="keyboard").props("flat").classes(
-                "editor-btn editor-toolbar-btn"
-            ).on("click", lambda: dialog.open()).classes("button-open-search")
+            # An icon: looked up now and then, not used while working.
+            ui.button(icon="keyboard").props(
+                'flat aria-label="Keyboard shortcuts"'
+            ).classes("editor-btn editor-icon").on(
+                "click", lambda: dialog.open()
+            ).tooltip("Keyboard shortcuts")

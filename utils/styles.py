@@ -613,14 +613,13 @@ theme_styles = """
         top: 0;
         z-index: 20;
         background-color: var(--color-bg-surface);
-        border-bottom: 1px solid var(--color-border-subtle);
+        /* No rule under it: the toolbar and the editor are one surface,
+           and its own background already hides what scrolls beneath. */
         padding: 0.5rem 0.25rem;
     }
-    /* On the page's own black, with nothing dividing it from the editor
-       below -- the same as the panels themselves. */
+    /* On the page's own black, the same as the panels themselves. */
     .body--dark .editor-toolbar {
         background-color: var(--color-bg-page);
-        border-bottom: none;
     }
     /* Actions that belong together sit together, divided by a rule rather
        than by spacing alone -- undo/redo, then the document's own actions,
@@ -634,6 +633,14 @@ theme_styles = """
         height: 1.5rem;
         align-self: center;
         margin: 0 0.25rem;
+        /* A quiet rule: it only groups the buttons, and is decoration
+           rather than a boundary anyone has to see (so no 3:1 to meet).
+           The theme's border grey drew it as strongly as the outlined
+           buttons beside it. */
+        background-color: #d9dce1 !important;
+    }
+    .body--dark .editor-toolbar .q-separator--vertical {
+        background-color: #3a3f46 !important;
     }
 
     /* The document's own name, at the head of the toolbar: it says what is
@@ -733,6 +740,29 @@ theme_styles = """
         background-color: var(--color-bg-page) !important;
         border: none !important;
         opacity: 0.4;
+    }
+
+    /* Toolbar design A: the text's own actions (undo, redo, search,
+       validate) are quiet -- no box around each, only a hover -- the
+       looked-up ones (shortcuts, info, close) are icons, and Export and
+       Save are the two outlined buttons. */
+    .body--light .q-btn.editor-btn.editor-quiet,
+    .body--light .q-btn.editor-btn.editor-quiet[disabled],
+    .body--light .q-btn.editor-btn.editor-icon {
+        background-color: transparent !important;
+        border-color: transparent !important;
+    }
+    .body--light .q-btn.editor-btn.editor-quiet:hover,
+    .body--light .q-btn.editor-btn.editor-icon:hover {
+        background-color: var(--color-bg-surface-alt) !important;
+    }
+    .editor-icon {
+        min-width: 0 !important;
+        width: 2.5rem;
+        padding: 0 !important;
+    }
+    .body--dark .q-btn.editor-btn.editor-outlined {
+        border: 1px solid var(--color-border) !important;
     }
 
     /* ── Primary button contrast (Quasar color=primary / toggle-color=primary) ── */

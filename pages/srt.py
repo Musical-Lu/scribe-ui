@@ -219,10 +219,13 @@ def create() -> None:
         editor.set_autoscroll(app.storage.user.get(AUTOSCROLL_KEY, False))
         editor.set_highlight_word(editor.autoscroll)
 
-        # Grouped by what each action acts on rather than left as one row of
-        # identically sized buttons: history, then the document itself, then
-        # the actions that only look at it. Save is the one filled button --
-        # it is what the reader came here to do.
+        # Design A of the eight drawn for it (Save made white too): what
+        # works on the text on the left -- history, then finding and
+        # checking -- as quiet buttons with no box around each; what is
+        # about the document as a whole on the right. Shortcuts and Info
+        # are looked up rather than used while working, so they are icons.
+        # Export and Save are the two outlined buttons, and closing is the
+        # usual x at the end of the row.
         with ui.row().classes(
             "editor-toolbar justify-between w-full gap-2 items-center"
         ):
@@ -231,115 +234,118 @@ def create() -> None:
 
                 ui.separator().props("vertical")
 
-                with ui.row().classes("editor-toolbar-group"):
-                    with ui.button("Save", icon="save") as save_button:
-                        save_button.on("click", lambda: editor.save_srt_changes())
-                        save_button.props("flat").classes(
-                            "editor-btn editor-toolbar-btn"
+                editor.create_search_panel()
+                if data_format == "srt":
+                    with ui.button("Validate", icon="check").props(
+                        "flat"
+                    ).classes(
+                        "editor-btn editor-toolbar-btn editor-quiet"
+                    ) as validate_button:
+                        validate_button.on(
+                            "click",
+                            lambda: editor.validate_captions(),
                         )
 
-                    # Export button - opens dialog
-                    ui.button("Export", icon="download").props("flat").classes(
-                        "editor-btn editor-toolbar-btn"
-                    ).on("click", lambda: editor.show_export_dialog(filename))
+            with ui.row().classes("editor-toolbar-group"):
+                editor.show_keyboard_shortcuts()
+
+                # What is open and what is in it. A dialog rather than a
+                # strip of the toolbar: it is read when a reader wonders,
+                # not while they work, and the figures are far easier to
+                # label properly with room to put the labels in.
+                with ui.dialog() as info_dialog, ui.card().classes(
+                    "editor-info-card"
+                ):
+                    ui.label("Information").classes("text-h6")
+                    ui.separator()
+
+                    figures = {}
+
+                    # Each row is a name, a value and what the value
+                    # means. The last two move as the reader edits; the
+                    # first two never do. One set of rows for both
+                    # formats -- they say the same things about the same
+                    # file -- differing only in what a block of it is
+                    # called: a reader has captions in front of them or
+                    # paragraphs, and "block" is neither.
+                    counted = "captions" if data_format == "srt" else "paragraphs"
+
+                    rows = (
+                        (
+                            "Media file",
+                            filename,
+                            "The source file for this transcription.",
+                        ),
+                        (
+                            "Language",
+                            language,
+                            "The language used for the transcription.",
+                        ),
+                        (
+                            counted.capitalize(),
+                            "captions",
+                            f"The number of {counted} in the transcription.",
+                        ),
+                        (
+                            "Reading speed",
+                            "wpm",
+                            "Average reading speed across the transcription.",
+                        ),
+                    )
+
+                    with ui.column().classes("editor-info-rows"):
+                        for label, value, explanation in rows:
+                            with ui.row().classes("editor-info-row"):
+                                ui.label(label).classes("editor-info-label")
+
+                                with ui.column().classes("editor-info-value"):
+                                    # A figure the editor keeps up to
+                                    # date is registered by name; the
+                                    # fixed ones are drawn as they are.
+                                    if value in ("captions", "wpm"):
+                                        figures[value] = ui.label().classes(
+                                            "editor-info-figure"
+                                        )
+                                    else:
+                                        ui.label(value).classes(
+                                            "editor-info-figure"
+                                        )
+
+                                    if explanation:
+                                        ui.label(explanation).classes(
+                                            "editor-info-explanation"
+                                        )
+
+                    editor.set_status_elements(**figures)
+
+                    with ui.row().classes("w-full justify-end"):
+                        ui.button("Close", on_click=info_dialog.close).props(
+                            "flat"
+                        ).classes("editor-btn")
+
+                ui.button(icon="info").props(
+                    'flat aria-label="Information"'
+                ).classes("editor-btn editor-icon").on(
+                    "click", info_dialog.open
+                ).tooltip("Information")
 
                 ui.separator().props("vertical")
 
-                with ui.row().classes("editor-toolbar-group"):
-                    editor.create_search_panel()
-                    if data_format == "srt":
-                        with ui.button("Validate", icon="check").props(
-                            "flat"
-                        ).classes("editor-btn editor-toolbar-btn") as validate_button:
-                            validate_button.on(
-                                "click",
-                                lambda: editor.validate_captions(),
-                            )
-                    editor.show_keyboard_shortcuts()
+                ui.button("Export", icon="download").props("flat").classes(
+                    "editor-btn editor-toolbar-btn editor-outlined"
+                ).on("click", lambda: editor.show_export_dialog(filename))
 
-                    # What is open and what is in it. A dialog rather than a
-                    # strip of the toolbar: it is read when a reader wonders,
-                    # not while they work, and the figures are far easier to
-                    # label properly with room to put the labels in.
-                    with ui.dialog() as info_dialog, ui.card().classes(
-                        "editor-info-card"
-                    ):
-                        ui.label("Information").classes("text-h6")
-                        ui.separator()
+                with ui.button("Save", icon="save") as save_button:
+                    save_button.on("click", lambda: editor.save_srt_changes())
+                    save_button.props("flat").classes(
+                        "editor-btn editor-toolbar-btn editor-outlined"
+                    )
 
-                        figures = {}
-
-                        # Each row is a name, a value and what the value
-                        # means. The last two move as the reader edits; the
-                        # first two never do. One set of rows for both
-                        # formats -- they say the same things about the same
-                        # file -- differing only in what a block of it is
-                        # called: a reader has captions in front of them or
-                        # paragraphs, and "block" is neither.
-                        counted = "captions" if data_format == "srt" else "paragraphs"
-
-                        rows = (
-                            (
-                                "Media file",
-                                filename,
-                                "The source file for this transcription.",
-                            ),
-                            (
-                                "Language",
-                                language,
-                                "The language used for the transcription.",
-                            ),
-                            (
-                                counted.capitalize(),
-                                "captions",
-                                f"The number of {counted} in the transcription.",
-                            ),
-                            (
-                                "Reading speed",
-                                "wpm",
-                                "Average reading speed across the transcription.",
-                            ),
-                        )
-
-                        with ui.column().classes("editor-info-rows"):
-                            for label, value, explanation in rows:
-                                with ui.row().classes("editor-info-row"):
-                                    ui.label(label).classes("editor-info-label")
-
-                                    with ui.column().classes("editor-info-value"):
-                                        # A figure the editor keeps up to
-                                        # date is registered by name; the
-                                        # fixed ones are drawn as they are.
-                                        if value in ("captions", "wpm"):
-                                            figures[value] = ui.label().classes(
-                                                "editor-info-figure"
-                                            )
-                                        else:
-                                            ui.label(value).classes(
-                                                "editor-info-figure"
-                                            )
-
-                                        if explanation:
-                                            ui.label(explanation).classes(
-                                                "editor-info-explanation"
-                                            )
-
-                        editor.set_status_elements(**figures)
-
-                        with ui.row().classes("w-full justify-end"):
-                            ui.button("Close", on_click=info_dialog.close).props(
-                                "flat"
-                            ).classes("editor-btn")
-
-                    ui.button("Info", icon="info").props("flat").classes(
-                        "editor-btn editor-toolbar-btn"
-                    ).on("click", info_dialog.open)
-
-
-            with ui.button("Close editor", icon="close").props(
-                "flat"
-            ).classes("editor-btn editor-toolbar-btn") as close_button:
-                close_button.on("click", lambda: editor.close_editor("/home"))
+                with ui.button(icon="close").props(
+                    'flat aria-label="Close editor"'
+                ).classes("editor-btn editor-icon") as close_button:
+                    close_button.on("click", lambda: editor.close_editor("/home"))
+                    close_button.tooltip("Close editor")
 
         # One document editor for both formats now; subtitleMode (set in
         # TranscriptEditor.build) is what tells it to drop the speaker margin

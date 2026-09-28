@@ -297,7 +297,7 @@ class SRTEditor(ReviewMixin, SearchMixin, ExportMixin, RenderMixin):
             self.undo_button = (
                 ui.button("Undo", icon="undo")
                 .props("flat")
-                .classes("editor-btn editor-toolbar-btn")
+                .classes("editor-btn editor-toolbar-btn editor-quiet")
                 .on("click", self.undo)
             )
             self.undo_button.disable()
@@ -305,7 +305,7 @@ class SRTEditor(ReviewMixin, SearchMixin, ExportMixin, RenderMixin):
             self.redo_button = (
                 ui.button("Redo", icon="redo")
                 .props("flat")
-                .classes("editor-btn editor-toolbar-btn")
+                .classes("editor-btn editor-toolbar-btn editor-quiet")
                 .on("click", self.redo)
             )
             self.redo_button.disable()
