@@ -260,6 +260,35 @@ def test_the_fifth_action_takes_a_row_of_its_own_on_a_phone():
     assert "jobs-action-wide" in home
 
 
+def test_a_quote_in_a_drive_name_cannot_add_attributes():
+    # A Drive file name is chosen by whoever named the file. Parsed out of a
+    # props string, `x" onmouseover="..."` became an inline event handler;
+    # set as a value it is only ever the one attribute's text.
+    from utils.drive_dialogs import set_attribute
+
+    class Element:
+        def __init__(self):
+            self._props = {}
+
+        def update(self):
+            pass
+
+    name = 'x.mp3" onmouseover="alert(document.cookie)'
+    element = set_attribute(Element(), "aria-label", name)
+
+    assert element._props == {"aria-label": name}
+
+
+def test_no_drive_name_goes_through_a_props_string():
+    source = pathlib.Path("utils/drive_dialogs.py").read_text()
+
+    # Every attribute built from a name uses set_attribute; no props string
+    # is ever formatted with one.
+    assert 'entry["name"]}"\'' not in source
+    assert "aria-label=\"{" not in source
+    assert "props(f'" not in source and 'props(f"' not in source
+
+
 def test_names_from_drive_are_never_drawn_as_html():
     source = pathlib.Path("utils/drive_dialogs.py").read_text()
 

@@ -59,6 +59,26 @@ def _notify_error(result: DriveResult) -> None:
     ui.notify(result.error, type="negative", timeout=None, close_button="Close")
 
 
+def set_attribute(element: ui.element, name: str, value: str) -> ui.element:
+    """
+    Set one attribute to a value, as a value.
+
+    Never `element.props(f'{name}="{value}"')` with anything not written
+    here: `.props()` parses its string into key=value pairs, so a quote in
+    the value closes the attribute and whatever follows becomes attributes
+    of its own -- and a Drive file name is chosen by whoever named the file,
+    which includes anyone sharing one with the reader. `x" onmouseover="..."`
+    became an inline event handler (Vue sets a string `on*` attribute with
+    setAttribute), running in Scribe's origin. Set through the props
+    dictionary, the value is sent to the browser as data and bound as one
+    attribute's text, whatever it contains.
+    """
+
+    element._props[name] = value
+    element.update()
+    return element
+
+
 def format_size(size: Optional[int]) -> str:
     if size is None:
         return ""
@@ -127,8 +147,8 @@ async def ensure_connected(status: dict) -> bool:
     login_url = started.result["login_url"]
     connected = asyncio.get_running_loop().create_future()
 
-    with ui.dialog().props(
-        f'persistent aria-label="Connect to {name}"'
+    with set_attribute(
+        ui.dialog().props("persistent"), "aria-label", f"Connect to {name}"
     ) as dialog, ui.card().style("max-width: 480px;"):
         ui.label(f"Connect to {name}").classes("text-h6")
         ui.label(
@@ -309,7 +329,7 @@ class DriveBrowser:
             f"Import from {self.name}" if self.mode == "file" else f"Save to {self.name}"
         )
 
-        with ui.dialog().props(f'aria-label="{title}"') as self.dialog, ui.card().classes(
+        with set_attribute(ui.dialog(), "aria-label", title) as self.dialog, ui.card().classes(
             "drive-browser"
         ):
             with ui.element("div").classes("drive-browser-head w-full"):
@@ -318,8 +338,10 @@ class DriveBrowser:
                     ui.label(self.instance).classes("text-sm text-theme-muted")
 
             with ui.element("div").classes("drive-browser-body w-full"):
-                self.tree = ui.element("nav").classes("drive-tree").props(
-                    f'aria-label="Folders in {self.name}"'
+                self.tree = set_attribute(
+                    ui.element("nav").classes("drive-tree"),
+                    "aria-label",
+                    f"Folders in {self.name}",
                 )
                 with ui.element("div").classes("drive-table"):
                     self.table_head = ui.element("div").classes("drive-row drive-row-head")
@@ -538,9 +560,14 @@ class DriveBrowser:
         choosable = self.mode == "file" and not is_dir and entry.get("media")
         size = format_size(entry.get("size")) if entry.get("size") is not None else ""
 
+        # The name is Drive's, chosen by whoever named the file: an attribute
+        # value set as a value (set_attribute), never parsed out of a props
+        # string, where a quote in it would start attributes of its own.
         if is_dir:
-            row = ui.element("button").classes("drive-row").props(
-                f'type=button aria-label="Open folder {entry["name"]}"'
+            row = set_attribute(
+                ui.element("button").classes("drive-row").props("type=button"),
+                "aria-label",
+                f"Open folder {entry['name']}",
             )
             row.on("click", lambda _, p=entry["path"]: self.go(p))
         elif choosable:
@@ -552,8 +579,10 @@ class DriveBrowser:
 
         with row:
             if choosable:
-                box = ui.element("input").props(
-                    f'type=checkbox aria-label="{entry["name"]}"'
+                box = set_attribute(
+                    ui.element("input").props("type=checkbox"),
+                    "aria-label",
+                    entry["name"],
                 )
                 selected = entry["path"] in self.selected
                 if selected:
@@ -628,8 +657,8 @@ async def get_from_drive(on_imported: Callable[[], Awaitable[None]]) -> None:
     # fills, and the bar counts files.
     total = len(paths)
 
-    with ui.dialog().props(
-        f'persistent aria-label="Importing from {name}"'
+    with set_attribute(
+        ui.dialog().props("persistent"), "aria-label", f"Importing from {name}"
     ) as progress, ui.card().classes("drive-progress"):
         with ui.element("div").classes("drive-progress-head"):
             ui.label(f"Importing from {name}").classes("text-h6")
@@ -733,7 +762,11 @@ async def _confirm_replace(name: str, filename: str) -> Optional[str]:
     "replace", "keep" (save under a new name) or None (skip).
     """
 
-    with ui.dialog().props(f'aria-label="{filename} already exists"') as dialog, ui.card():
+    # The file name can be a Drive name (a job imported from Drive keeps it):
+    # set as a value, never parsed out of a props string.
+    with set_attribute(
+        ui.dialog(), "aria-label", f"{filename} already exists"
+    ) as dialog, ui.card():
         ui.label(f"{filename} already exists in {name}").classes("text-h6")
         ui.label("Replace it, or save this one under a new name?").classes("text-body2")
         with ui.row().classes("w-full justify-end gap-2"):
@@ -818,8 +851,8 @@ async def save_to_drive(
     items = [(filename, send_file(content)) for filename, content in files]
     items += [(filename, send_original(uuid)) for filename, uuid in originals]
 
-    with ui.dialog().props(
-        f'persistent aria-label="Saving to {name}"'
+    with set_attribute(
+        ui.dialog().props("persistent"), "aria-label", f"Saving to {name}"
     ) as progress, ui.card().classes("items-center"):
         heading = ui.label("").classes("text-h6").props(
             "role=status aria-live=polite"
