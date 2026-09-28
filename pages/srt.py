@@ -837,4 +837,5 @@ def create() -> None:
                                 transcript,
                                 captions=lambda: editor.captions,
                                 return_focus=lambda: validate_button,
+                                revalidate=editor.revalidate_items,
                             )

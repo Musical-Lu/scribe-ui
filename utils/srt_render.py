@@ -303,9 +303,13 @@ class RenderMixin:
 
         return [item for entry in issues for item in entry["items"]]
 
-    def validate_captions(self):
+    def run_validation(self) -> list:
         """
-        Check the captions and report what came back, caption by caption.
+        Check every caption again and redraw their markings; answer the
+        issues (as collect_validation_issues does). What Validate and the
+        panel's "Check again" share: the whole list is always checked,
+        since a fix to one caption's timing can clear or cause an overlap
+        with its neighbour.
         """
 
         changed_indices = {
@@ -322,6 +326,22 @@ class RenderMixin:
         self.refresh_display(
             specific_indices=changed_indices if changed_indices else None
         )
+
+        return issues
+
+    def revalidate_items(self) -> list:
+        """
+        The panel's "Check again": every issue, freshly checked, one by one.
+        """
+
+        return self.validation_items(self.run_validation())
+
+    def validate_captions(self):
+        """
+        Check the captions and report what came back, caption by caption.
+        """
+
+        issues = self.run_validation()
 
         # The docked panel under the video (issue #138) when the page has
         # one; the dialog otherwise.

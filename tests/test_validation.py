@@ -361,6 +361,68 @@ class TestShowingSomeKinds:
         assert panel.items == [] and panel.position == 0
 
 
+class TestCheckingAgain:
+    """
+    "Check again" after a fix: validate again, and land on the caption's
+    first remaining issue, or on the next issue after it once it passes.
+    """
+
+    def panel(self, subject):
+        from utils.validation_panel import ValidationPanel
+
+        panel = ValidationPanel.__new__(ValidationPanel)
+        panel.revalidate = subject.revalidate_items
+        panel.hidden = set()
+        panel.all_items = subject.revalidate_items()
+        panel.items = list(panel.all_items)
+        panel.position = 0
+        panel.draw = lambda: None
+        panel.draw_filters = lambda: None
+        panel.focus = lambda element: None
+        panel.heading = None
+
+        class Note:
+            text = ""
+
+            def set_text(self, text):
+                Note.text = text
+
+            def set_visibility(self, shown):
+                pass
+
+        panel.note = Note()
+        return panel
+
+    def subject(self):
+        subject = editor(
+            caption(1, "00:00:00,000", "00:00:03,000", "   "),
+            caption(2, "00:00:04,000", "00:00:06,000", "   "),
+        )
+        subject.render_override = None
+        subject.update_flagged_count = lambda: None
+        return subject
+
+    def test_a_fixed_caption_moves_on_to_the_next_issue(self):
+        subject = self.subject()
+        panel = self.panel(subject)
+
+        subject.captions[0].text = "Fixed"
+        panel.check_again()
+
+        assert panel.current()["caption"].index == 2
+        assert panel.note.text == "Caption 1 passes now."
+        assert subject.captions[0].is_valid
+
+    def test_a_caption_still_wrong_stays(self):
+        subject = self.subject()
+        panel = self.panel(subject)
+
+        panel.check_again()
+
+        assert panel.current()["caption"].index == 1
+        assert panel.note.text == "Caption 1 still has 1 issue."
+
+
 class TestTheCheckboxes:
     def test_a_checkbox_only_acts_when_it_disagrees(self):
         from utils.validation_panel import ValidationPanel

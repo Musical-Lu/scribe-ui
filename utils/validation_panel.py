@@ -98,6 +98,8 @@ class ValidationPanel:
             the caption an issue names still exists.
         return_focus: returns the element focus goes back to on close (the
             Validate button), or None.
+        revalidate: checks every caption again and returns the fresh items
+            (SRTEditor.revalidate_items), for "Check again"; None hides it.
     """
 
     def __init__(
@@ -105,10 +107,12 @@ class ValidationPanel:
         transcript,
         captions: Callable[[], list],
         return_focus: Callable[[], Optional[ui.element]] = lambda: None,
+        revalidate: Optional[Callable[[], list]] = None,
     ) -> None:
         self.transcript = transcript
         self.captions = captions
         self.return_focus = return_focus
+        self.revalidate = revalidate
         # Every issue Validate found, and the ones of the kinds shown. The
         # hidden kinds are kept across Validate runs, so a reader working
         # through one kind at a time can re-run it after each fix.
@@ -167,6 +171,10 @@ class ValidationPanel:
                 ):
                     self.spoken_position = ui.label("").classes("sr-only")
 
+                    # What "Check again" found -- said once, cleared by the
+                    # next step so it never outlives the issue it was about.
+                    self.note = ui.label("").classes("validation-panel-note")
+
                     with ui.element("div").classes("validation-panel-issue") as self.issue:
                         with ui.element("div").classes("validation-panel-kind"):
                             self.icon = ui.icon("warning").props("aria-hidden=true")
@@ -180,6 +188,19 @@ class ValidationPanel:
                             )
                             self.separator = ui.label("·").props("aria-hidden=true")
                             self.detail = ui.label("")
+
+                        # After a fix: check again without leaving the issue.
+                        self.recheck = (
+                            ui.button(
+                                "Check again", icon="refresh", on_click=self.check_again
+                            )
+                            .props("flat dense no-caps")
+                            .classes(
+                                "editor-btn editor-toolbar-btn editor-outlined "
+                                "validation-panel-recheck"
+                            )
+                        )
+                        self.recheck.set_visibility(revalidate is not None)
 
                     self.gone = ui.label(
                         "This caption has changed since Validate ran. "
@@ -291,6 +312,50 @@ class ValidationPanel:
                     on_change=lambda e, r=rule: self.set_shown(r, e.value),
                 ).props("dense").classes("validation-panel-check")
 
+    # -- Checking again ---------------------------------------------------
+
+    def check_again(self) -> None:
+        """
+        After a fix: validate again and land where it makes sense -- on the
+        caption's first remaining issue if it still has one, otherwise on
+        the next issue after it -- and say which it was. The filters, and
+        focus on this button, stay.
+        """
+
+        item = self.current()
+        if self.revalidate is None or item is None:
+            return
+
+        index = item["caption"].index
+
+        self.all_items = self.revalidate()
+        self.items = shown_items(self.all_items, self.hidden)
+        self.draw_filters()
+
+        remaining = [i for i in self.items if i["caption"].index == index]
+
+        if remaining:
+            self.position = self.items.index(remaining[0])
+            count = len(remaining)
+            note = (
+                f"Caption {index} still has {count} "
+                + ("issue." if count == 1 else "issues.")
+            )
+        else:
+            self.position = next(
+                (n for n, i in enumerate(self.items) if i["caption"].index > index),
+                max(len(self.items) - 1, 0),
+            )
+            note = f"Caption {index} passes now."
+
+        self.draw()
+        self.note.set_text(note)
+        self.note.set_visibility(True)
+
+        # The button goes with the last issue; focus goes to the heading.
+        if not self.items:
+            self.focus(self.heading)
+
     # -- Stepping -----------------------------------------------------------
 
     def go_next(self) -> None:
@@ -342,6 +407,7 @@ class ValidationPanel:
         total = len(self.items)
         item = self.current()
 
+        self.note.set_visibility(False)
         self.heading.set_text(heading_text(len(self.all_items)))
         self.issue.set_visibility(item is not None)
         self.foot.set_visibility(total > 0)

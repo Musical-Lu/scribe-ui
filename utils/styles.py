@@ -1770,6 +1770,16 @@ theme_styles = """
     .validation-panel-check {
         font-size: 0.8125rem;
     }
+    .validation-panel-note {
+        font-size: 0.8125rem;
+        font-weight: 600;
+        margin-bottom: 6px;
+    }
+    .validation-panel .validation-panel-recheck {
+        align-self: flex-start;
+        margin-top: 8px;
+        font-size: 0.8125rem;
+    }
     .body--dark .validation-panel {
         background: var(--color-bg-page);
     }
