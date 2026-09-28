@@ -88,7 +88,7 @@ class Customer:
                         )
                     if self.drive_enabled:
                         drive = self.drive_display_name or "Sunet Drive"
-                        where = self.drive_url or "chosen by each user"
+                        where = self.drive_url or "no instance set, so not offered"
                         ui.label(f"{drive}: {where}").classes("text-md")
                     ui.label(f"Plan: {self.priceplan.capitalize()}").classes(
                         "text-sm text-theme-muted"

@@ -112,13 +112,38 @@ def show_originals_dialog(originals: list[tuple[str, str]]) -> None:
                 download_originals(originals)
                 _close_and_delete()
 
+            async def to_drive() -> None:
+                # Closed only afterwards: the Drive dialogs are opened from
+                # inside this one, and Quasar does not draw the contents of
+                # a dialog that is closed.
+                await save_to_drive([], originals)
+                _close_and_delete()
+
             with ui.row().classes("w-full justify-end gap-2"):
                 ui.button("Close", on_click=_close_and_delete).props(
                     "outline color=black"
                 )
+                # Save to Sunet Drive, as in the full export dialog: hidden
+                # until the backend says Drive is offered to this reader.
+                drive_button = (
+                    ui.button("Save to Drive", icon="cloud_upload", on_click=to_drive)
+                    .props("flat color=black")
+                    .classes("default-style")
+                )
+                drive_button.set_visibility(False)
                 ui.button("Download", icon="download", on_click=download).props(
                     "flat color=white"
                 ).classes("button-default-style")
+
+            async def show_drive() -> None:
+                status = await drive_status()
+                if status.ok and status.result.get("enabled"):
+                    drive_button.set_text(
+                        f"Save to {drive_display_name(status.result)}"
+                    )
+                    drive_button.set_visibility(True)
+
+            ui.timer(0.0, show_drive, once=True)
 
     dialog.open()
 
@@ -1150,10 +1175,16 @@ class ExportMixin:
                                 return
 
                             if to_drive:
-                                # Originals are not sent: they are encrypted
-                                # for the reader in Scribe and only open
-                                # through their own download.
-                                await save_to_drive(files)
+                                # The originals go too when the reader asked
+                                # for them -- saved by the backend straight
+                                # into Drive, decrypted on the way.
+                                await save_to_drive(
+                                    files,
+                                    originals
+                                    if include_originals is not None
+                                    and include_originals.value
+                                    else [],
+                                )
                                 return
 
                             if is_bulk:
@@ -1210,7 +1241,7 @@ class ExportMixin:
 
                         ui.timer(0.0, show_drive, once=True)
 
-                        ui.button("Export", icon="download", on_click=lambda: exp()).props(
+                        ui.button("Download", icon="download", on_click=lambda: exp()).props(
                             "flat color=white"
                         ).classes("button-default-style")
 

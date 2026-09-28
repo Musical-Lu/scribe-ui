@@ -4,8 +4,8 @@ async calls. The dialogs that use them are in utils/drive_dialogs.py.
 
 Every call answers a `DriveResult` rather than raising: `ok`, the backend's
 `result` when it worked, and otherwise a message fit to show the reader and
-the backend's `reason` code -- "disabled", "no_instance", "not_connected",
-"exists", "too_large", "not_found", "unavailable", "invalid". The dialogs
+the backend's `reason` code -- "disabled", "not_connected", "exists",
+"too_large", "not_found", "unavailable", "invalid". The dialogs
 act on the reason; the message is only ever shown.
 
 Scribe never sees the reader's Drive password. Connecting sends them to
@@ -18,6 +18,9 @@ from typing import Any, Optional
 
 import httpx
 
+from nicegui import app
+
+from utils.helpers import storage_decrypt
 from utils.settings import get_settings
 from utils.token import get_auth_header
 
@@ -78,20 +81,11 @@ async def _call(method: str, path: str, timeout=TIMEOUT, **kwargs) -> DriveResul
 
 async def drive_status() -> DriveResult:
     """
-    {"enabled", "display_name", and when enabled: "instance",
-    "user_instance", "org_instance", "connected", "pending"}.
+    {"enabled", "display_name", and when enabled: "instance" (the
+    organisation's -- readers do not choose one), "connected", "pending"}.
     """
 
     return await _call("GET", "")
-
-
-async def drive_set_instance(url: Optional[str]) -> DriveResult:
-    """
-    The reader's own choice of Drive instance; None or "" goes back to
-    their organisation's.
-    """
-
-    return await _call("PUT", "/instance", json={"url": url or None})
 
 
 async def drive_connect() -> DriveResult:
@@ -110,7 +104,11 @@ async def drive_poll() -> DriveResult:
     return await _call("GET", "/connect")
 
 
-async def drive_disconnect() -> DriveResult:
+async def drive_logout() -> DriveResult:
+    """
+    Log out of Drive: the backend revokes Scribe's access in Drive too.
+    """
+
     return await _call("DELETE", "/connect")
 
 
@@ -150,6 +148,36 @@ async def drive_save(
             "overwrite": "true" if overwrite else "false",
         },
         content=content,
+    )
+
+
+async def drive_save_original(
+    job_id: str,
+    folder: str,
+    name: Optional[str] = None,
+    overwrite: bool = False,
+) -> DriveResult:
+    """
+    Save a recording's original to the reader's Drive. The backend decrypts
+    it with the reader's encryption password -- the same check downloading
+    it makes -- and streams it straight into Drive; it never passes through
+    here. `name` defaults to the recording's own; an existing file answers
+    reason "exists" unless `overwrite`.
+    """
+
+    return await _call(
+        "POST",
+        "/save-original",
+        timeout=TRANSFER_TIMEOUT,
+        json={
+            "job_id": job_id,
+            "encryption_password": storage_decrypt(
+                app.storage.user.get("encryption_password")
+            ),
+            "path": folder,
+            "name": name,
+            "overwrite": overwrite,
+        },
     )
 
 

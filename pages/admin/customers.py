@@ -45,9 +45,9 @@ settings = get_settings()
 def drive_fields(customer: dict | None = None) -> tuple:
     """
     The Sunet Drive settings of a customer (SUNET/scribe-backend#64):
-    whether Drive is offered to its users at all, which instance they use
-    unless they choose their own, and what the organisation calls it. The
-    backend only accepts Sunet Drive addresses for the instance.
+    whether Drive is offered to its users at all, which instance is theirs
+    -- required when it is; users do not choose one -- and what the
+    organisation calls it. The backend only accepts Sunet Drive addresses.
 
     Returns:
         tuple: (enabled switch, instance input, display name input).
@@ -68,8 +68,8 @@ def drive_fields(customer: dict | None = None) -> tuple:
         )
         .classes("w-full")
         .props(
-            'outlined type=url hint="Used unless a user chooses their own. '
-            'Leave empty to let every user choose."'
+            'outlined type=url hint="The organisation\'s own Drive, used by all '
+            'its users."'
         )
     )
     display = (
@@ -93,6 +93,21 @@ def drive_fields(customer: dict | None = None) -> tuple:
     update()
 
     return enabled, instance, display
+
+
+def drive_fields_valid(enabled, instance) -> bool:
+    """
+    Drive offered with no instance would be a switch that does nothing;
+    say so on the field (3.3.1) rather than after a round trip.
+    """
+
+    if enabled.value and not (instance.value or "").strip():
+        instance.props('error error-message="Enter the organisation\'s Drive address."')
+        instance.run_method("focus")
+        return False
+
+    instance.props(remove="error error-message")
+    return True
 
 
 def create_customer_dialog(page: callable) -> None:
@@ -195,6 +210,9 @@ def create_customer_dialog(page: callable) -> None:
                         name_input.run_method("focus")
                         return
                     name_input.props(remove="error error-message")
+
+                    if not drive_fields_valid(drive_enabled, drive_url_input):
+                        return
 
                     selected_realms = realm_select.value if realm_select.value else []
                     new_realms = [
@@ -426,6 +444,9 @@ async def edit_customer(customer_id: str) -> None:
             blocks_input.run_method("focus")
             return
         blocks_input.props(remove="error error-message")
+
+        if not drive_fields_valid(drive_enabled, drive_url_input):
+            return
 
         error = await save_customer(
             customer_abbr_input.value,

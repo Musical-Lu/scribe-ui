@@ -407,7 +407,7 @@ def create() -> None:
                 # organisation, and then named the way the organisation
                 # names its Drive.
                 get_from_drive_button = ui.button(
-                    "Get from Drive", icon="cloud_download"
+                    "From Drive", icon="cloud_download"
                 ).props("color=black flat")
                 get_from_drive_button.classes("default-style jobs-action-wide")
                 get_from_drive_button.on(
@@ -456,7 +456,7 @@ def create() -> None:
             status = await drive_status()
             if status.ok and status.result.get("enabled"):
                 get_from_drive_button.set_text(
-                    f"Get from {display_name(status.result)}"
+                    f"From {display_name(status.result)}"
                 )
                 get_from_drive_button.set_visibility(True)
 
