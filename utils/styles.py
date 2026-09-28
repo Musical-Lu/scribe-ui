@@ -1752,6 +1752,24 @@ theme_styles = """
     .validation-panel.is-clear {
         --vp-tone: var(--color-status-ok-border);
     }
+    .validation-panel.is-muted {
+        --vp-tone: var(--color-border-subtle);
+    }
+    /* Which kinds of issue are stepped through: a row of checkboxes under
+       the panel, ticked while that kind is shown. */
+    .validation-panel-wrap {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+    }
+    .validation-panel-filters {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 2px 14px;
+    }
+    .validation-panel-check {
+        font-size: 0.8125rem;
+    }
     .body--dark .validation-panel {
         background: var(--color-bg-page);
     }

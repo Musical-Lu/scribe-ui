@@ -124,7 +124,9 @@ class RenderMixin:
         the validation panel (utils/validation_panel.py), each with a short
         heading naming the rule ("Line exceeds 42 characters"), a detail
         saying how this caption breaks it ("Line 2 has 48 characters.") and
-        the character offset the caret should land at to fix it -- see
+        the character offset the caret should land at to fix it, and which
+        rule it breaks (`rule`, one of RULE_LABELS in validation_panel.py),
+        for the panel to show some kinds and not others -- see
         validation_items(). `is_valid` is set here as it always was, so the
         editor's own red rules follow from the same pass.
         """
@@ -137,6 +139,7 @@ class RenderMixin:
             error: bool,
             title: str,
             detail: str,
+            rule: str,
             offset: int = 0,
         ) -> None:
             entry = issues.get(caption.index)
@@ -157,6 +160,7 @@ class RenderMixin:
                     "error": error,
                     "title": title,
                     "detail": detail,
+                    "rule": rule,
                     "offset": offset,
                 }
             )
@@ -170,6 +174,7 @@ class RenderMixin:
                     error=True,
                     title="No text",
                     detail="The caption is empty.",
+                    rule="empty",
                 )
 
             if caption.get_end_seconds() < caption.get_start_seconds():
@@ -178,6 +183,7 @@ class RenderMixin:
                     "Ends before it starts.",
                     error=True,
                     title="Ends before it starts",
+                    rule="order",
                     detail=(
                         f"Starts at {caption.start_time}, "
                         f"ends at {caption.end_time}."
@@ -203,6 +209,7 @@ class RenderMixin:
                                 "characters"
                             ),
                             detail=f"Line {number} has {len(line)} characters.",
+                            rule="length",
                             # Where the line runs past the guideline, which
                             # is where the break usually wants to go.
                             offset=line_start + settings.CHARACTER_LIMIT,
@@ -217,6 +224,7 @@ class RenderMixin:
                         error=False,
                         title=f"More than {settings.MAX_SUBTITLE_LINES} lines",
                         detail=f"It has {len(lines)} lines.",
+                        rule="lines",
                     )
 
                 seconds = caption.get_end_seconds() - caption.get_start_seconds()
@@ -236,6 +244,7 @@ class RenderMixin:
                             "on screen"
                         ),
                         detail=f"On screen for {seconds:.2f}s.",
+                        rule="short",
                     )
 
         # Timing against the neighbours. Two captions sharing a start time
@@ -254,6 +263,7 @@ class RenderMixin:
                     "Same timing as an earlier caption.",
                     error=True,
                     title="Same timing as an earlier caption",
+                    rule="duplicate",
                     detail=(
                         "Starts and ends at the same time as caption "
                         f"{seen_times[times].index}."
@@ -269,6 +279,7 @@ class RenderMixin:
                     f"Overlaps caption #{following.index}.",
                     error=True,
                     title="Overlapping timestamps",
+                    rule="overlap",
                     detail=f"Overlaps caption {following.index}.",
                 )
                 report(
@@ -276,6 +287,7 @@ class RenderMixin:
                     f"Overlaps caption #{current.index}.",
                     error=True,
                     title="Overlapping timestamps",
+                    rule="overlap",
                     detail=f"Overlaps caption {current.index}.",
                 )
 

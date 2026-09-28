@@ -305,6 +305,77 @@ class TestTheDockedPanel:
         assert position_text(1, 5) == "2 of 5"
 
 
+class TestShowingSomeKinds:
+    """
+    The panel can step through some kinds of issue and not others.
+    """
+
+    def items(self):
+        long_line = "x" * (settings.CHARACTER_LIMIT + 6)
+        subject = editor(
+            caption(1, "00:00:00,000", "00:00:03,000", f"Short\n{long_line}"),
+            caption(2, "00:00:02,000", "00:00:05,000", long_line),
+        )
+        return subject.validation_items(subject.collect_validation_issues())
+
+    def test_every_issue_names_its_kind(self):
+        from utils.validation_panel import RULE_LABELS
+
+        assert {item["rule"] for item in self.items()} <= set(RULE_LABELS)
+
+    def test_kinds_are_counted_in_a_fixed_order(self):
+        from utils.validation_panel import rule_counts
+
+        # Overlaps (an error) before line length (a warning).
+        assert rule_counts(self.items()) == [("overlap", 2), ("length", 2)]
+
+    def test_a_hidden_kind_is_left_out(self):
+        from utils.validation_panel import shown_items
+
+        shown = shown_items(self.items(), {"overlap"})
+
+        assert {item["rule"] for item in shown} == {"length"}
+        assert len(shown) == 2
+
+    def test_toggling_keeps_the_issue_on_screen_when_it_is_still_shown(self):
+        from utils.validation_panel import ValidationPanel
+
+        panel = ValidationPanel.__new__(ValidationPanel)
+        panel.all_items = self.items()
+        panel.hidden = set()
+        panel.items = list(panel.all_items)
+        panel.checkboxes = {}
+        panel.draw = lambda: None
+
+        # Stand on caption 2's line-length issue, then hide overlaps.
+        on_screen = next(
+            i for i in panel.items if i["rule"] == "length" and i["caption"].index == 2
+        )
+        panel.position = panel.items.index(on_screen)
+        panel.toggle("overlap")
+
+        assert panel.current() is on_screen
+
+        # Hide its own kind: back to the first issue still shown -- none.
+        panel.toggle("length")
+        assert panel.items == [] and panel.position == 0
+
+
+class TestTheCheckboxes:
+    def test_a_checkbox_only_acts_when_it_disagrees(self):
+        from utils.validation_panel import ValidationPanel
+
+        panel = ValidationPanel.__new__(ValidationPanel)
+        panel.hidden = set()
+        toggled = []
+        panel.toggle = lambda rule: toggled.append(rule)
+
+        panel.set_shown("overlap", True)  # already shown: nothing to do
+        panel.set_shown("overlap", False)  # hide it
+
+        assert toggled == ["overlap"]
+
+
 class TestStepping:
     """
     Previous and Next keep focus on something that can take it: the button

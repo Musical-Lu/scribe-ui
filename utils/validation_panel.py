@@ -53,6 +53,40 @@ def heading_text(total: int) -> str:
     return "Validation issues" if total else "No validation issues"
 
 
+# The kinds of issue Validate reports (each item's `rule`, set in
+# collect_validation_issues), named for the filter checkboxes -- in this order,
+# errors first.
+RULE_LABELS = {
+    "empty": "No text",
+    "order": "Ends before start",
+    "duplicate": "Same timing",
+    "overlap": "Overlaps",
+    "length": "Line length",
+    "lines": "Too many lines",
+    "short": "Too short",
+}
+
+
+def rule_counts(items: list) -> list[tuple[str, int]]:
+    """
+    (rule, how many) for each kind present in `items`, in RULE_LABELS order.
+    """
+
+    counts: dict[str, int] = {}
+    for item in items:
+        counts[item["rule"]] = counts.get(item["rule"], 0) + 1
+
+    return [(rule, counts[rule]) for rule in RULE_LABELS if rule in counts]
+
+
+def shown_items(items: list, hidden: set) -> list:
+    """
+    The items whose kind the reader has not hidden, in their own order.
+    """
+
+    return [item for item in items if item["rule"] not in hidden]
+
+
 class ValidationPanel:
     """
     Built once, hidden, under the video; `show()` fills and opens it each
@@ -75,7 +109,13 @@ class ValidationPanel:
         self.transcript = transcript
         self.captions = captions
         self.return_focus = return_focus
+        # Every issue Validate found, and the ones of the kinds shown. The
+        # hidden kinds are kept across Validate runs, so a reader working
+        # through one kind at a time can re-run it after each fix.
+        self.all_items: list = []
         self.items: list = []
+        self.hidden: set[str] = set()
+        self.checkboxes: dict = {}
         self.position = 0
         self.checked = 0
 
@@ -85,68 +125,80 @@ class ValidationPanel:
         # position and Next as a compact group in that header -- and the
         # issue itself below, its kind in small capitals over the rule it
         # breaks. The colour only repeats what the words say.
-        with ui.element("section").classes("validation-panel w-full").props(
-            'aria-labelledby="validation-panel-heading"'
-        ) as self.panel:
-            with ui.element("div").classes("validation-panel-head"):
-                self.heading = (
-                    ui.label("")
-                    .classes("validation-panel-heading")
-                    .props('id=validation-panel-heading tabindex=-1')
-                )
-
-                with ui.element("div").classes("validation-panel-nav") as self.foot:
-                    self.previous = ui.button(
-                        icon="chevron_left", on_click=self.go_previous, color=None
-                    ).props('flat aria-label="Previous issue"').classes(
-                        "validation-panel-step"
-                    )
-                    self.position_label = ui.label("").classes(
-                        "validation-panel-position"
-                    )
-                    self.next = ui.button(
-                        icon="chevron_right", on_click=self.go_next, color=None
-                    ).props('flat aria-label="Next issue"').classes(
-                        "validation-panel-step"
+        # The panel and, below it, the filter checkboxes appear and go together.
+        with ui.element("div").classes("validation-panel-wrap w-full") as self.container:
+            with ui.element("section").classes("validation-panel w-full").props(
+                'aria-labelledby="validation-panel-heading"'
+            ) as self.panel:
+                with ui.element("div").classes("validation-panel-head"):
+                    self.heading = (
+                        ui.label("")
+                        .classes("validation-panel-heading")
+                        .props('id=validation-panel-heading tabindex=-1')
                     )
 
-                ui.button(icon="close", on_click=self.close).props(
-                    'flat aria-label="Close validation panel"'
-                ).classes("editor-btn editor-icon validation-panel-close").tooltip(
-                    "Close"
-                )
-
-            # What is shown -- kind, rule, caption -- is one live region, so
-            # a screen reader hears the new issue as Next moves to it, while
-            # focus stays on Next. The position is said inside it too, since
-            # the visible "2 of 5" sits up in the header beside the arrows.
-            with ui.element("div").classes("validation-panel-body").props(
-                "role=status aria-live=polite aria-atomic=true"
-            ):
-                self.spoken_position = ui.label("").classes("sr-only")
-
-                with ui.element("div").classes("validation-panel-issue") as self.issue:
-                    with ui.element("div").classes("validation-panel-kind"):
-                        self.icon = ui.icon("warning").props("aria-hidden=true")
-                        self.kind = ui.label("")
-                    self.title = ui.label("").classes("validation-panel-title")
-                    with ui.element("div").classes("validation-panel-detail"):
-                        self.caption_button = (
-                            ui.button("", on_click=self.go_to_caption, color=None)
-                            .props("flat dense no-caps")
-                            .classes("validation-panel-caption")
+                    with ui.element("div").classes("validation-panel-nav") as self.foot:
+                        self.previous = ui.button(
+                            icon="chevron_left", on_click=self.go_previous, color=None
+                        ).props('flat aria-label="Previous issue"').classes(
+                            "validation-panel-step"
                         )
-                        self.separator = ui.label("·").props("aria-hidden=true")
-                        self.detail = ui.label("")
+                        self.position_label = ui.label("").classes(
+                            "validation-panel-position"
+                        )
+                        self.next = ui.button(
+                            icon="chevron_right", on_click=self.go_next, color=None
+                        ).props('flat aria-label="Next issue"').classes(
+                            "validation-panel-step"
+                        )
 
-                self.gone = ui.label(
-                    "This caption has changed since Validate ran. "
-                    "Run Validate again for current results."
-                ).classes("validation-panel-gone")
+                    ui.button(icon="close", on_click=self.close).props(
+                        'flat aria-label="Close validation panel"'
+                    ).classes("editor-btn editor-icon validation-panel-close").tooltip(
+                        "Close"
+                    )
 
-                self.all_clear = ui.label("").classes("validation-panel-clear")
+                # What is shown -- kind, rule, caption -- is one live region, so
+                # a screen reader hears the new issue as Next moves to it, while
+                # focus stays on Next. The position is said inside it too, since
+                # the visible "2 of 5" sits up in the header beside the arrows.
+                with ui.element("div").classes("validation-panel-body").props(
+                    "role=status aria-live=polite aria-atomic=true"
+                ):
+                    self.spoken_position = ui.label("").classes("sr-only")
 
-        self.panel.set_visibility(False)
+                    with ui.element("div").classes("validation-panel-issue") as self.issue:
+                        with ui.element("div").classes("validation-panel-kind"):
+                            self.icon = ui.icon("warning").props("aria-hidden=true")
+                            self.kind = ui.label("")
+                        self.title = ui.label("").classes("validation-panel-title")
+                        with ui.element("div").classes("validation-panel-detail"):
+                            self.caption_button = (
+                                ui.button("", on_click=self.go_to_caption, color=None)
+                                .props("flat dense no-caps")
+                                .classes("validation-panel-caption")
+                            )
+                            self.separator = ui.label("·").props("aria-hidden=true")
+                            self.detail = ui.label("")
+
+                    self.gone = ui.label(
+                        "This caption has changed since Validate ran. "
+                        "Run Validate again for current results."
+                    ).classes("validation-panel-gone")
+
+                    self.all_clear = ui.label("").classes("validation-panel-clear")
+
+            # Which kinds of issue to step through: one toggle per kind
+            # found, with its count, below the panel rather than inside it --
+            # a setting for the whole review, not part of any one issue.
+            # Only there when there is a choice.
+            self.filters = (
+                ui.element("div")
+                .classes("validation-panel-filters")
+                .props('role=group aria-label="Show these kinds of issue"')
+            )
+
+        self.container.set_visibility(False)
 
     # -- Opening and closing ---------------------------------------------
 
@@ -159,10 +211,12 @@ class ValidationPanel:
         keyboard user is where the results are.
         """
 
-        self.items = items
+        self.all_items = items
+        self.items = shown_items(items, self.hidden)
         self.position = 0
         self.checked = checked
-        self.panel.set_visibility(True)
+        self.container.set_visibility(True)
+        self.draw_filters()
         self.draw()
 
         if len(self.items) > 1:
@@ -176,12 +230,66 @@ class ValidationPanel:
         only the "under review" marking goes. Focus returns to Validate.
         """
 
-        self.panel.set_visibility(False)
+        self.container.set_visibility(False)
         self.transcript.review(None)
 
         target = self.return_focus()
         if target is not None:
             self.focus(target)
+
+    # -- Filtering ----------------------------------------------------------
+
+    def toggle(self, rule: str) -> None:
+        """
+        Show or hide one kind of issue. The issue on screen stays on screen
+        if its kind is still shown; otherwise the first shown one is.
+        Focus stays on the checkbox: it is never rebuilt by this.
+        """
+
+        current = self.current()
+
+        if rule in self.hidden:
+            self.hidden.discard(rule)
+        else:
+            self.hidden.add(rule)
+
+        self.items = shown_items(self.all_items, self.hidden)
+        self.position = next(
+            (n for n, item in enumerate(self.items) if item is current), 0
+        )
+
+        self.draw()
+
+    def set_shown(self, rule: str, shown: bool) -> None:
+        """
+        A checkbox changed. Only acts when it disagrees with what is shown,
+        so a value set from here can never toggle twice.
+        """
+
+        if shown == (rule not in self.hidden):
+            return
+
+        self.toggle(rule)
+
+    def draw_filters(self) -> None:
+        """
+        One checkbox per kind found this time, drawn afresh on each
+        Validate: "Overlaps (2)", ticked while that kind is shown.
+        """
+
+        counts = rule_counts(self.all_items)
+
+        self.filters.clear()
+        self.checkboxes = {}
+        self.filters.set_visibility(len(counts) > 1)
+
+        with self.filters:
+            for rule, count in counts:
+                self.checkboxes[rule] = ui.checkbox(
+                    f"{RULE_LABELS[rule]} ({count})",
+                    value=rule not in self.hidden,
+                    on_change=lambda e, r=rule: self.set_shown(r, e.value),
+                ).props("dense").classes("validation-panel-check")
 
     # -- Stepping -----------------------------------------------------------
 
@@ -234,18 +342,25 @@ class ValidationPanel:
         total = len(self.items)
         item = self.current()
 
-        self.heading.set_text(heading_text(total))
+        self.heading.set_text(heading_text(len(self.all_items)))
         self.issue.set_visibility(item is not None)
         self.foot.set_visibility(total > 0)
         self.all_clear.set_visibility(total == 0)
         self.gone.set_visibility(False)
 
         if item is None:
-            self.panel.classes(replace="validation-panel w-full is-clear")
-            noun = "caption" if self.checked == 1 else "captions"
-            self.all_clear.set_text(
-                f"All {self.checked} {noun} follow the subtitle guidelines."
-            )
+            if self.all_items:
+                # Issues exist; the reader has hidden every kind of them.
+                self.panel.classes(replace="validation-panel w-full is-muted")
+                self.all_clear.set_text(
+                    "Every kind of issue is hidden. Choose one above to see it."
+                )
+            else:
+                self.panel.classes(replace="validation-panel w-full is-clear")
+                noun = "caption" if self.checked == 1 else "captions"
+                self.all_clear.set_text(
+                    f"All {self.checked} {noun} follow the subtitle guidelines."
+                )
             self.spoken_position.set_text("")
             self.transcript.review(None)
             return
