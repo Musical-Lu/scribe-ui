@@ -194,9 +194,9 @@ async def test_an_original_is_saved_by_the_backend_with_the_password(backend, mo
 
 def test_the_originals_go_to_drive_when_the_export_asks_for_them():
     source = pathlib.Path("utils/srt_export.py").read_text()
-    drive_branch = source[source.index("if to_drive:"):source.index("if is_bulk:\n                                zip_buffer")]
+    drive_branch = source[source.index("if to_drive:"):source.index("chosen_originals = (")]
 
-    # Only when "Download the original recording" is ticked.
+    # Only when "Include the original recording" is ticked.
     assert "include_originals.value" in drive_branch
     assert "save_to_drive(" in drive_branch
     assert "originals" in drive_branch

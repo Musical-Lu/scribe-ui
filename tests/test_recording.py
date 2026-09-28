@@ -434,21 +434,23 @@ def test_my_files_marks_recordings_and_exports_their_original():
     assert "show_originals_dialog(originals)" in common
 
 
-def test_originals_are_downloaded_from_scribe_one_by_one(monkeypatch):
-    from utils import srt_export
+def test_one_original_is_itself_several_are_one_zip(monkeypatch):
+    from utils import export_zip, srt_export
 
     urls = []
     monkeypatch.setattr(
         srt_export.ui.download, "from_url", lambda url, *a, **k: urls.append(url)
     )
+    monkeypatch.setattr(export_zip, "_signed_in_owner", lambda: "owner")
 
-    srt_export.download_originals([("Lecture", "job-1"), ("Seminar", "a/b")])
+    srt_export.download_originals([("Seminar", "a/b")])
+    assert urls == [recording_api.ORIGINAL_PREFIX + "/a%2Fb"]
 
-    assert urls == [
-        recording_api.ORIGINAL_PREFIX + "/job-1",
-        recording_api.ORIGINAL_PREFIX + "/a%2Fb",
-    ]
-    assert srt_export.originals_label([("x", "1")]) == "Download the original recording"
+    urls.clear()
+    srt_export.download_originals([("Lecture", "job-1"), ("Seminar", "job-2")])
+    assert len(urls) == 1 and urls[0].startswith(export_zip.ZIP_PREFIX + "/")
+
+    assert srt_export.originals_label([("x", "1")]) == "Include the original recording"
     assert srt_export.originals_label([("x", "1"), ("y", "2")]).endswith("(2)")
 
 

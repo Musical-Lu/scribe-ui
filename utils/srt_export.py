@@ -32,6 +32,7 @@ from urllib.parse import quote
 
 from utils.drive import display_name as drive_display_name, drive_status
 from utils.drive_dialogs import save_to_drive
+from utils.export_zip import prepare_zip
 from utils.helpers import sanitize_filename
 from utils.recording_api import ORIGINAL_PREFIX
 from utils.settings import get_settings
@@ -43,25 +44,33 @@ settings = get_settings()
 
 def download_originals(originals: list[tuple[str, str]]) -> None:
     """
-    Download the original of each recording in `originals` ((filename,
-    uuid) pairs).  Each is its own download, streamed from Scribe through
-    ORIGINAL_PREFIX rather than packed into a ZIP here: an original of a
-    long lecture is tens of megabytes, and this process would otherwise
-    hold every one of them in memory at once.  The backend's own
-    Content-Disposition names the file.
+    Download the originals in `originals` ((filename, uuid) pairs): one on
+    its own, streamed through ORIGINAL_PREFIX (the backend's own
+    Content-Disposition names it), several as one ZIP -- more than one file
+    is always a ZIP, built as it is sent (utils/export_zip.py) so no
+    original is held here whole.
     """
 
-    for _, uuid in originals:
+    if len(originals) == 1:
+        uuid = originals[0][1]
         ui.download.from_url(f"{ORIGINAL_PREFIX}/{quote(uuid, safe='')}")
+        return
+
+    link = prepare_zip("recordings.zip", [], originals)
+    if link is None:
+        ui.notify("Sign in again to download.", type="negative")
+        return
+
+    ui.download.from_url(link)
 
 
 def originals_label(originals: list[tuple[str, str]]) -> str:
     """The wording of the option, for one recording or several."""
 
     if len(originals) == 1:
-        return "Download the original recording"
+        return "Include the original recording"
 
-    return f"Download the original recordings ({len(originals)})"
+    return f"Include the original recordings ({len(originals)})"
 
 
 def show_originals_dialog(originals: list[tuple[str, str]]) -> None:
@@ -104,8 +113,7 @@ def show_originals_dialog(originals: list[tuple[str, str]]) -> None:
 
             if len(originals) > 1:
                 ui.label(
-                    "Each recording is downloaded as its own file; your browser "
-                    "may ask before allowing several downloads."
+                    "The recordings are downloaded together as one ZIP file."
                 ).classes("text-caption").style("color: var(--color-text-muted);")
 
             def download() -> None:
@@ -295,8 +303,6 @@ class ExportMixin:
         Left out, a single export offers the open job's own original when it
         is a recording.
         """
-        import io
-        import zipfile
         from pathlib import Path
 
         filename = sanitize_filename(filename)
@@ -312,8 +318,14 @@ class ExportMixin:
         # with no preview at all.
         bulk_needs_preview = is_bulk
 
+        # Named for what is open: subtitles are captions, not a transcript.
+        # A bulk export is one type, and this editor is its first file's.
+        title = (
+            "Export captions" if self.data_format == "srt" else "Export transcript"
+        )
+
         ui.add_head_html(default_styles)
-        with ui.dialog().props('aria-label="Export transcript"') as dialog:
+        with ui.dialog().props(f'aria-label="{title}"') as dialog:
             # A fresh ui.dialog() is built on every call (Ctrl+E is bound
             # straight to show_export_dialog), and closing one only hides
             # it -- the element stays in the DOM. Deleting it once closed
@@ -342,7 +354,7 @@ class ExportMixin:
             with card:
                 # Header
                 with ui.row().classes("w-full items-center justify-between mb-4"):
-                    ui.label("Export transcript").classes("text-h5 font-bold")
+                    ui.label(title).classes("text-h5 font-bold")
                     ui.button(icon="close", on_click=_close_and_delete).props(
                         "flat round dense color=grey-7 aria-label='Close export dialog'"
                     )
@@ -1187,22 +1199,35 @@ class ExportMixin:
                                 )
                                 return
 
-                            if is_bulk:
-                                zip_buffer = io.BytesIO()
+                            chosen_originals = (
+                                originals
+                                if include_originals is not None
+                                and include_originals.value
+                                else []
+                            )
 
-                                with zipfile.ZipFile(
-                                    zip_buffer, "w", zipfile.ZIP_DEFLATED
-                                ) as zf:
-                                    for base_name, content in files:
-                                        zf.writestr(base_name, content)
-
-                                ui.download(
-                                    zip_buffer.getvalue(),
-                                    filename="bulk_export.zip",
+                            # More than one file is always one ZIP, the
+                            # originals in it too: streamed as it is written
+                            # (utils/export_zip.py), so an hour of recording
+                            # is never held here whole. One file is itself.
+                            if len(files) + len(chosen_originals) > 1:
+                                zip_name = (
+                                    "bulk_export.zip"
+                                    if is_bulk
+                                    else f"{Path(filename).stem}.zip"
                                 )
+                                link = prepare_zip(zip_name, files, chosen_originals)
+                                if link is None:
+                                    ui.notify(
+                                        "Sign in again to export.",
+                                        type="negative",
+                                    )
+                                    return
+                                ui.download.from_url(link)
 
                                 ui.notify(
-                                    f"Exported {len(files)} files as {chosen_fmt.upper()}",
+                                    f"Exported {len(files) + len(chosen_originals)} "
+                                    "files as a ZIP",
                                     type="positive",
                                 )
                             else:
@@ -1212,9 +1237,6 @@ class ExportMixin:
                                     f"Exported as {chosen_fmt.upper()}",
                                     type="positive",
                                 )
-
-                            if include_originals is not None and include_originals.value:
-                                download_originals(originals)
 
                         # Save to Sunet Drive (SUNET/scribe-backend#64):
                         # hidden until the backend says Drive is offered to
