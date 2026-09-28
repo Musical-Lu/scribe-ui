@@ -356,3 +356,26 @@ def test_the_upload_limit_is_for_all_the_files_together():
     assert "4 GB each" not in source
     assert "max_total_size=UPLOAD_MAX_TOTAL_BYTES" in source
     assert UPLOAD_MAX_TOTAL_BYTES < 4 * 1024**3
+
+
+def test_file_icons_come_from_the_type_drive_reports():
+    from utils.drive_dialogs import file_icon
+
+    assert file_icon("video/mp4") == "o_movie"
+    assert file_icon("audio/mpeg") == "o_audiotrack"
+    assert file_icon("image/png") == "o_image"
+    assert file_icon("text/plain") == "o_description"
+    assert file_icon("application/pdf") == "o_picture_as_pdf"
+    # Drive not saying, or saying something no family covers.
+    assert file_icon(None) == "o_insert_drive_file"
+    assert file_icon("application/octet-stream") == "o_insert_drive_file"
+
+
+def test_file_icons_never_look_at_the_name():
+    import inspect
+
+    from utils.drive_dialogs import DriveBrowser, file_icon
+
+    # Only the MIME type goes in; no list of endings to keep up to date.
+    assert list(inspect.signature(file_icon).parameters) == ["mime"]
+    assert 'file_icon(entry.get("mime"))' in inspect.getsource(DriveBrowser.draw_row)

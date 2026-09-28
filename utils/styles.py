@@ -3223,6 +3223,92 @@ drive_styles = """
         color: var(--color-text-muted);
     }
 
+    /* Importing from Drive (design A): heading and "File n of N", the file
+       being imported on a row of its own, one bar segment per file. */
+    .drive-progress {
+        width: 520px;
+        max-width: 95vw !important;
+        min-width: 0 !important;
+        padding: 28px 32px !important;
+        gap: 18px !important;
+        /* NiceGUI's card lines its children up at the start; here they
+           span the card, or the bar has no width at all. */
+        align-items: stretch !important;
+    }
+    .drive-progress-head {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 12px;
+    }
+    .drive-progress-count {
+        font-size: 14px;
+        color: var(--color-text-secondary);
+        flex-shrink: 0;
+    }
+    .drive-progress-file {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 14px;
+        border-radius: 6px;
+        background: var(--color-bg-surface-alt);
+        min-width: 0;
+    }
+    .drive-progress-file span {
+        font-size: 15px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .drive-progress-bar {
+        display: grid;
+        gap: 6px;
+    }
+    .drive-progress-segment {
+        height: 6px;
+        border-radius: 3px;
+        background: var(--color-bg-surface-hover);
+        position: relative;
+        overflow: hidden;
+    }
+    .drive-progress-segment.is-done {
+        background: var(--color-btn-primary-bg);
+    }
+    .drive-progress-segment.is-failed {
+        background: var(--color-text-danger);
+    }
+    /* The file in flight: a highlight that moves, since there is no
+       percentage within a file to fill it with. */
+    .drive-progress-segment.is-busy::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        width: 40%;
+        border-radius: 3px;
+        background: var(--color-btn-primary-bg);
+        animation: drive-progress-slide 1.4s ease-in-out infinite;
+    }
+    @keyframes drive-progress-slide {
+        from { transform: translateX(-100%); }
+        to { transform: translateX(250%); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+        .drive-progress-segment.is-busy::after {
+            animation: none;
+            width: 100%;
+            opacity: 0.45;
+        }
+    }
+    .drive-progress-note {
+        font-size: 13px;
+        color: var(--color-text-muted);
+    }
+    .drive-progress-foot {
+        display: flex;
+        justify-content: flex-end;
+    }
+
     /* A phone has no room for two panes: the tree goes, a ".." row brings
        back the one thing it did there -- going up -- and the columns drop
        to name and size. */

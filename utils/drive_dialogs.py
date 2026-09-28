@@ -32,7 +32,7 @@ from datetime import datetime
 
 from typing import Awaitable, Callable, Optional
 
-from nicegui import ui
+from nicegui import background_tasks, ui
 from nicegui.elements.mixins.text_element import TextElement
 
 from utils.drive import (
@@ -201,6 +201,34 @@ def span(text: str) -> TextElement:
     """
 
     return TextElement(tag="span", text=text)
+
+
+def file_icon(mime: Optional[str]) -> str:
+    """
+    The icon for a file in the Drive browser, from the MIME type Drive
+    reports for it (WebDAV getcontenttype) -- never from its name: a list
+    of file endings is one more thing to keep up to date, and Drive has
+    already worked the type out. Grouped by the type's family (video/*,
+    audio/*, ...); anything Drive does not say, or that no family here
+    covers, gets the plain file icon.
+    """
+
+    family, _, subtype = (mime or "").lower().partition("/")
+
+    match family:
+        case "video":
+            return "o_movie"
+        case "audio":
+            return "o_audiotrack"
+        case "image":
+            return "o_image"
+        case "text":
+            return "o_description"
+
+    if subtype == "pdf":
+        return "o_picture_as_pdf"
+
+    return "o_insert_drive_file"
 
 
 def format_date(value: Optional[str]) -> str:
@@ -539,9 +567,7 @@ class DriveBrowser:
 
             with ui.element("span").classes("drive-cell-name"):
                 ui.icon(
-                    "o_folder"
-                    if is_dir
-                    else ("o_movie" if entry.get("media") else "o_description")
+                    "o_folder" if is_dir else file_icon(entry.get("mime"))
                 ).props("aria-hidden=true")
                 span(entry["name"])
             span(size).classes("drive-cell-num")
@@ -580,49 +606,99 @@ async def get_from_drive(on_imported: Callable[[], Awaitable[None]]) -> None:
     if not paths:
         return
 
-    stopping = False
+    # Cancel stops at once, mid-file included: the request in flight is a
+    # task, and cancelling it closes the connection, which the backend
+    # watches for -- it abandons the transfer and removes the job it had
+    # started. Files already imported stay in My files.
+    cancelled = False
+    in_flight: Optional[asyncio.Task] = None
 
-    def stop() -> None:
-        nonlocal stopping
-        stopping = True
-        stop_button.set_enabled(False)
-        stop_button.set_text("Stopping after this file...")
+    def cancel() -> None:
+        nonlocal cancelled
+        cancelled = True
+        cancel_button.set_enabled(False)
+        if in_flight is not None:
+            in_flight.cancel()
+
+    # Design A of the four drawn for it: a heading and a "File n of N"
+    # counter, the file being imported on a row of its own (shortened, never
+    # wrapped into the heading), and a bar of one segment per file. There
+    # is no percentage within a file to show -- the backend answers only
+    # once the file has arrived -- so the current segment moves rather than
+    # fills, and the bar counts files.
+    total = len(paths)
 
     with ui.dialog().props(
-        f'persistent aria-label="Importing files from {name}"'
-    ) as progress, ui.card().classes("items-center"):
-        heading = ui.label("").classes("text-h6").props(
-            "role=status aria-live=polite"
-        )
-        ui.spinner(size="50px").props("aria-hidden=true")
-        stop_button = ui.button("Stop after this file", on_click=stop).props(
-            "flat color=black"
-        )
-        stop_button.set_visibility(len(paths) > 1)
+        f'persistent aria-label="Importing from {name}"'
+    ) as progress, ui.card().classes("drive-progress"):
+        with ui.element("div").classes("drive-progress-head"):
+            ui.label(f"Importing from {name}").classes("text-h6")
+            counter = ui.label("").classes("drive-progress-count").props(
+                "role=status aria-live=polite"
+            )
+        with ui.element("div").classes("drive-progress-file"):
+            ui.spinner(size="20px").props("aria-hidden=true")
+            current = span("").props("aria-live=polite")
+        segments = ui.element("div").classes("drive-progress-bar").props(
+            "aria-hidden=true"
+        ).style(f"grid-template-columns: repeat({total}, minmax(0, 1fr));")
+        note = ui.label(
+            "Each file appears in My files as soon as it has arrived."
+        ).classes("drive-progress-note")
+        with ui.element("div").classes("drive-progress-foot"):
+            cancel_button = ui.button("Cancel", on_click=cancel).props(
+                "flat color=black"
+            ).classes("cancel-style")
+
+        counter.set_visibility(total > 1)
+        note.set_visibility(total > 1)
     progress.open()
 
     done: list[str] = []
     failed: list[tuple[str, str]] = []
+    states: list[str] = ["waiting"] * total
+
+    def draw_segments() -> None:
+        segments.clear()
+        with segments:
+            for state in states:
+                ui.element("div").classes(f"drive-progress-segment is-{state}")
 
     try:
         for n, path in enumerate(paths, start=1):
-            if stopping:
+            if cancelled:
                 break
 
             filename = posixpath.basename(path)
-            heading.set_text(
-                f"Importing {filename} from {name}..."
-                if len(paths) == 1
-                else f"Importing {n} of {len(paths)} from {name}: {filename}"
-            )
+            counter.set_text(f"File {n} of {total}")
+            current.set_text(filename)
+            states[n - 1] = "busy"
+            draw_segments()
 
-            result = await drive_import(path)
+            # handle_exceptions=False: its outcome, cancellation included,
+            # is awaited right here rather than logged in the background.
+            in_flight = background_tasks.create(
+                drive_import(path),
+                name=f"import from Drive ({n} of {total})",
+                handle_exceptions=False,
+            )
+            try:
+                result = await in_flight
+            except asyncio.CancelledError:
+                if not cancelled:
+                    raise
+                states[n - 1] = "waiting"
+                break
+            finally:
+                in_flight = None
 
             if result.ok:
+                states[n - 1] = "done"
                 done.append(filename)
                 await on_imported()
                 continue
 
+            states[n - 1] = "failed"
             failed.append((filename, result.error))
             if result.reason == "not_connected":
                 break
@@ -642,8 +718,14 @@ async def get_from_drive(on_imported: Callable[[], Awaitable[None]]) -> None:
             f"{filename}: {error}", type="negative", timeout=None, close_button="Close"
         )
     skipped = len(paths) - len(done) - len(failed)
-    if skipped:
-        ui.notify(f"{skipped} files were not fetched.", type="info")
+    if cancelled:
+        ui.notify(
+            "Import cancelled."
+            + (f" {skipped} of {total} files were not imported." if total > 1 else ""),
+            type="info",
+        )
+    elif skipped:
+        ui.notify(f"{skipped} files were not imported.", type="info")
 
 
 async def _confirm_replace(name: str, filename: str) -> Optional[str]:
