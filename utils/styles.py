@@ -525,6 +525,47 @@ theme_styles = """
     .dropzone-drag {
         background-color: var(--color-bg-surface-hover) !important;
     }
+    /* The upload dialog's drop zone (design A): what to drop, and the way
+       to choose instead. */
+    .upload-dropzone {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding: 40px 24px;
+        border: 2px dashed var(--color-border-subtle);
+        border-radius: 10px;
+        text-align: center;
+        cursor: pointer;
+        box-sizing: border-box;
+        width: 100%;
+    }
+    .upload-dropzone svg {
+        color: var(--color-text-primary);
+    }
+    .upload-dropzone-title {
+        font-size: 18px;
+        font-weight: 600;
+        color: var(--color-text-primary);
+    }
+    .upload-dropzone-or {
+        font-size: 14px;
+        color: var(--color-text-secondary);
+    }
+    .upload-dropzone-choose {
+        display: inline-block;
+        padding: 10px 22px;
+        border-radius: 4px;
+        font-size: 15px;
+        background-color: var(--color-btn-primary-bg);
+        color: var(--color-btn-primary-text);
+        border: 1px solid var(--color-btn-primary-border);
+    }
+    .upload-limits {
+        font-size: 13px;
+        color: var(--color-text-muted);
+    }
 
     /* ── Global dark mode button override ── */
     .body--dark .q-btn--flat {
@@ -3016,9 +3057,200 @@ if (!window._scribeFocusModality) {
 </script>
 """
 
+# The Get from / Save to Sunet Drive dialog (utils/drive_dialogs.py): a
+# folder tree beside a table of the folder's contents -- design B of the
+# four drawn for it. Colours come from the theme's own tokens, so dark mode
+# needs only the one rule for text on the green current-folder mark.
+drive_styles = """
+<style>
+    .drive-browser {
+        width: 900px;
+        max-width: 95vw !important;
+        min-width: 0 !important;
+        height: min(680px, 90vh);
+        padding: 0 !important;
+        /* NiceGUI's card puts a gap between its children; here the head,
+           the panes and the foot meet at their rules. */
+        gap: 0 !important;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    .drive-tree .q-icon,
+    .drive-cell-name .q-icon {
+        font-size: 20px;
+        color: var(--color-text-tertiary);
+    }
+    .drive-tree .drive-tree-current .q-icon {
+        color: inherit;
+    }
+    .drive-browser-head,
+    .drive-browser-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 18px 24px;
+        flex-shrink: 0;
+    }
+    .drive-browser-head {
+        border-bottom: 1px solid var(--color-border-subtle);
+    }
+    .drive-browser-foot {
+        border-top: 1px solid var(--color-border-subtle);
+        flex-wrap: wrap;
+    }
+    .drive-browser-body {
+        flex: 1 1 auto;
+        display: flex;
+        min-height: 0;
+    }
+    .drive-tree {
+        width: 230px;
+        flex-shrink: 0;
+        overflow-y: auto;
+        padding: 12px 8px;
+        background: var(--color-bg-surface-alt);
+        border-right: 1px solid var(--color-border-subtle);
+    }
+    .drive-tree .q-btn {
+        width: 100%;
+        justify-content: flex-start;
+        text-align: left;
+        min-height: 36px;
+    }
+    .drive-tree .q-btn .q-btn__content {
+        justify-content: flex-start;
+        flex-wrap: nowrap;
+        min-width: 0;
+    }
+    .drive-tree .q-btn .block {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .drive-tree .drive-tree-current {
+        background: var(--color-brand-accent) !important;
+        font-weight: 600;
+    }
+    .body--dark .drive-tree .drive-tree-current {
+        color: #ffffff !important;
+    }
+    .drive-table {
+        flex: 1 1 auto;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+    }
+    .drive-table-rows {
+        flex: 1 1 auto;
+        overflow-y: auto;
+    }
+    /* One grid for the header and every row, so the columns line up. */
+    .drive-row {
+        display: grid;
+        grid-template-columns: 40px minmax(0, 1fr) 100px 130px;
+        align-items: center;
+        gap: 0 8px;
+        padding: 9px 20px;
+        min-height: 44px;
+        box-sizing: border-box;
+        border-bottom: 1px solid var(--color-bg-surface-hover);
+        cursor: pointer;
+    }
+    button.drive-row {
+        width: 100%;
+        background: none;
+        border: 0;
+        border-bottom: 1px solid var(--color-bg-surface-hover);
+        font: inherit;
+        color: inherit;
+        text-align: left;
+    }
+    .drive-row input[type=checkbox] {
+        width: 18px;
+        height: 18px;
+        margin: 0;
+        accent-color: var(--color-btn-primary-bg);
+        cursor: pointer;
+    }
+    .drive-row:hover {
+        background: var(--color-bg-surface-hover);
+    }
+    .drive-row-head {
+        font-size: 12px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--color-text-tertiary);
+        border-bottom-color: var(--color-border-subtle);
+        cursor: default;
+    }
+    .drive-row-head:hover {
+        background: transparent;
+    }
+    .drive-row-selected {
+        background: var(--color-bg-surface-alt);
+    }
+    .drive-row-disabled {
+        color: var(--color-text-tertiary);
+        cursor: default;
+    }
+    .drive-row-disabled:hover {
+        background: transparent;
+    }
+    .drive-cell-name {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+    }
+    .drive-cell-name span {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .drive-cell-num {
+        text-align: right;
+        color: var(--color-text-muted);
+        font-size: 13px;
+    }
+    .drive-row-up {
+        display: none;
+    }
+    .drive-empty {
+        padding: 24px 20px;
+        color: var(--color-text-muted);
+    }
+
+    /* A phone has no room for two panes: the tree goes, a ".." row brings
+       back the one thing it did there -- going up -- and the columns drop
+       to name and size. */
+    @media (max-width: 700px) {
+        .drive-tree {
+            display: none;
+        }
+        .drive-row-up {
+            display: grid;
+        }
+        .drive-row {
+            grid-template-columns: 40px minmax(0, 1fr) 80px;
+            padding: 9px 12px;
+        }
+        .drive-row > :nth-child(4) {
+            display: none;
+        }
+        .drive-browser-head,
+        .drive-browser-foot {
+            padding: 14px 16px;
+        }
+    }
+</style>
+"""
+
 # Keep backward-compatible alias so existing `from utils.common import default_styles`
 # and `from utils.styles import default_styles` both work during migration.
-default_styles = theme_styles
+default_styles = theme_styles + drive_styles
 
 # ---------------------------------------------------------------------------
 # Chart color tokens for Plotly (keyed by light / dark)

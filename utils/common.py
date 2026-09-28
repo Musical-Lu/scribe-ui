@@ -1057,7 +1057,8 @@ async def post_file(
     Post a file to the API with optional progress callback.
 
     Parameters:
-        file_upload: A NiceGUI FileUpload (kept in memory; spool_max_size is 4GB).
+        file_upload: A NiceGUI FileUpload (held in memory up to spool_max_size,
+            4 GB -- the most one upload can be, see UPLOAD_MAX_TOTAL_BYTES).
         filename: The filename.
         on_progress: Optional callback(percent: int) called during upload.
     """
@@ -1146,7 +1147,7 @@ def toggle_upload_status(upload_column, status_column, dialog, abort_button=None
     # Hiding upload_column also hides the Cancel button, which lives inside it,
     # and dialog.props("persistent") disables Esc and backdrop dismissal at the
     # same moment. Together that left a modal with no focusable element and no
-    # way out for the duration of the upload - up to 4 GB per the dialog's own
+    # way out for the duration of the upload - up to 4 GB in all, per the dialog's own
     # text. That is a keyboard trap, WCAG 2.1.2 (level A).
     #
     # persistent is kept on purpose: a stray backdrop click should not abandon a
@@ -1168,9 +1169,34 @@ def toggle_upload_status(upload_column, status_column, dialog, abort_button=None
         )
 
 
+# What the upload dialog accepts, and so what it says it accepts: the
+# picker's `accept` and the list printed under the drop zone both come from
+# here. .aif and .mpeg are the same formats as .aiff and .mpg, so they are
+# accepted without being listed twice.
+UPLOAD_EXTENSIONS = (
+    ".mp3", ".wav", ".flac", ".m4a", ".ogg", ".opus", ".wma", ".aiff", ".aif",
+    ".mp4", ".mov", ".mkv", ".avi", ".webm", ".mpg", ".mpeg",
+)
+UPLOAD_FORMATS_SHOWN = ", ".join(
+    ext[1:].upper() for ext in UPLOAD_EXTENSIONS if ext not in (".aif", ".mpeg")
+)
+UPLOAD_MAX_FILES = 5
+# The selected files are sent in one request (ui.upload's `batch`, which
+# on_multi_upload turns on), so the proxy's body limit -- nginx
+# client_max_body_size 4g in production -- caps them *together*, not each.
+# Checked in the dialog too, so a selection that is too big is refused with
+# a reason before it is sent rather than failing against the proxy. The
+# megabyte of headroom is for the multipart framing nginx counts as well.
+UPLOAD_MAX_TOTAL_BYTES = 4 * 1024**3 - 1024**2
+
+
 def table_upload(table) -> None:
     """
     Handle the click event on the Upload button with improved UX.
+
+    Design A of the four drawn for it: a titled dialog, a drop zone that
+    says what to drop and shows how to choose instead, and the limits and
+    formats spelled out under it rather than left to be discovered.
     """
 
     ui.add_head_html(default_styles)
@@ -1179,8 +1205,8 @@ def table_upload(table) -> None:
         # 400px is wider than a phone. It stays the width this wants to be
         # wherever there is room for it, and gives way where there is not.
         with ui.card().style(
-            "width: 100%; max-width: 480px; min-width: min(400px, 100%);"
-            " padding: 32px;"
+            "width: 100%; max-width: 560px; min-width: min(400px, 100%);"
+            " padding: 28px 32px;"
         ):
             with ui.column().classes("w-full items-center") as status_column:
                 ui.label("Uploading files").classes("text-h6 q-mb-sm")
@@ -1200,7 +1226,8 @@ def table_upload(table) -> None:
                 abort_button.classes("cancel-style")
                 status_column.visible = False
 
-            with ui.column().classes("w-full items-center mt-10") as upload_column:
+            with ui.column().classes("w-full gap-4") as upload_column:
+                ui.label("Upload files").classes("text-h6")
                 upload = (
                     ui.upload(
                         # The label is rendered into the uploader header, which
@@ -1213,11 +1240,18 @@ def table_upload(table) -> None:
                         ),
                         auto_upload=True,
                         multiple=True,
-                        max_files=5,
+                        max_files=UPLOAD_MAX_FILES,
+                        max_total_size=UPLOAD_MAX_TOTAL_BYTES,
+                        on_rejected=lambda: ui.notify(
+                            f"Those files were not uploaded: at most "
+                            f"{UPLOAD_MAX_FILES} files, 4 GB in total.",
+                            type="warning",
+                            position="top",
+                            timeout=None,
+                            close_button="Close",
+                        ),
                     )
-                    .props(
-                        "accept=.mp3,.wav,.flac,.mp4,.mkv,.avi,.m4a,.aiff,.aif,.mov,.ogg,.opus,.webm,.wma,.mpg,.mpeg"
-                    )
+                    .props(f"accept={','.join(UPLOAD_EXTENSIONS)}")
                     .style(
                         "position: absolute; width: 0; height: 0; overflow: hidden; opacity: 0"
                     )
@@ -1267,20 +1301,35 @@ def table_upload(table) -> None:
                 # role=button plus tabindex=0 makes the visible affordance the
                 # focusable control, and the keydown handler further down gives
                 # it Enter and Space. WCAG 2.1.1, 4.1.2 (level A).
+                #
+                # "Choose files" inside it is drawn as a button but is not
+                # one: the whole zone already is, and a button inside a
+                # button is not allowed. It is there to show the way in for
+                # anyone who does not drag. Static markup, nothing from a user.
                 dropzone = ui.html(
                     """
-                    <div class="w-96 h-40 flex items-center justify-center
-                                border-2 border-dashed rounded-2xl cursor-pointer
-                                dropzone-area"
+                    <div class="dropzone-area upload-dropzone"
                          role="button" tabindex="0"
-                         aria-label="Choose audio or video files to upload">
-                        Drag & drop files here or click to upload.
-                        <br/><br/>
-                        5 files at a maximum of 4GB can be uploaded at once.
+                         aria-label="Choose audio or video files to upload, or drop them here">
+                        <svg width="44" height="44" viewBox="0 0 24 24" fill="none"
+                             stroke="currentColor" stroke-width="1.6"
+                             aria-hidden="true">
+                            <path d="M12 16V4M7 9l5-5 5 5"/>
+                            <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/>
+                        </svg>
+                        <span class="upload-dropzone-title">Drag audio or video files here</span>
+                        <span class="upload-dropzone-or">or</span>
+                        <span class="upload-dropzone-choose" aria-hidden="true">Choose files</span>
                     </div>
                     """,
                     sanitize=False,
-                )
+                ).classes("w-full")
+
+                with ui.column().classes("gap-1 upload-limits"):
+                    ui.label(
+                        f"Up to {UPLOAD_MAX_FILES} files at a time, 4 GB in total."
+                    )
+                    ui.label(UPLOAD_FORMATS_SHOWN)
 
                 upload_id = upload.id
                 dropzone_id = dropzone.id
@@ -1356,10 +1405,11 @@ def table_upload(table) -> None:
                     ),
                     once=True,
                 )
-                with ui.row().style("justify-content: flex-end; gap: 12px;"):
+                with ui.row().classes("w-full").style(
+                    "justify-content: flex-end; gap: 12px;"
+                ):
                     with ui.button(
                         "Cancel",
-                        icon="cancel",
                         on_click=lambda: _cleanup_dialog(),
                     ) as cancel:
                         cancel.props("color=black flat")
