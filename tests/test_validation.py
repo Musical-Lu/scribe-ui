@@ -226,3 +226,128 @@ class TestSummaryWording:
 
     def test_only_warnings_says_only_warnings(self):
         assert editor().validation_summary(0, 4) == "4 captions with warnings"
+
+
+class TestTheDockedPanel:
+    """
+    Issue #138: Validate opens a panel under the video that steps through
+    the issues one at a time, in words, rather than a dialog of captions.
+    """
+
+    def test_each_issue_is_one_item_in_caption_order(self):
+        long_line = "x" * (settings.CHARACTER_LIMIT + 6)
+        subject = editor(
+            caption(1, "00:00:00,000", "00:00:03,000", "Fine"),
+            caption(2, "00:00:03,000", "00:00:06,000", f"Short\n{long_line}"),
+            caption(3, "00:00:05,000", "00:00:08,000", "Starts too early"),
+        )
+
+        items = subject.validation_items(subject.collect_validation_issues())
+
+        # Caption 2 twice (too long, and overlapping 3), then caption 3.
+        assert [(i["caption"].index, i["title"]) for i in items] == [
+            (2, f"Line exceeds {settings.CHARACTER_LIMIT} characters"),
+            (2, "Overlapping timestamps"),
+            (3, "Overlapping timestamps"),
+        ]
+
+    def test_an_issue_says_what_is_wrong_in_words(self):
+        long_line = "x" * (settings.CHARACTER_LIMIT + 6)
+        subject = editor(
+            caption(1, "00:00:00,000", "00:00:03,000", f"Short\n{long_line}")
+        )
+
+        item = subject.validation_items(subject.collect_validation_issues())[0]
+
+        assert item["error"] is False
+        assert item["detail"] == f"Line 2 has {len(long_line)} characters."
+        # The caret lands where line 2 passes the limit.
+        assert item["offset"] == len("Short\n") + settings.CHARACTER_LIMIT
+
+    def test_a_duplicate_names_the_caption_it_repeats(self):
+        subject = editor(
+            caption(1, "00:00:00,000", "00:00:02,000"),
+            caption(2, "00:00:00,000", "00:00:02,000"),
+        )
+
+        items = subject.validation_items(subject.collect_validation_issues())
+        duplicate = [i for i in items if i["title"].startswith("Same timing")]
+
+        assert duplicate[0]["caption"].index == 2
+        assert duplicate[0]["detail"].endswith("caption 1.")
+
+    def test_validate_opens_the_panel_when_the_page_has_one(self, monkeypatch):
+        subject = editor(caption(1, "00:00:00,000", "00:00:02,000", "   "))
+        shown = []
+
+        class Panel:
+            def show(self, items, checked):
+                shown.append((items, checked))
+
+        subject.validation_panel = Panel()
+        subject.render_override = None
+        monkeypatch.setattr(subject, "update_flagged_count", lambda: None)
+        monkeypatch.setattr(
+            subject, "show_validation_report", lambda issues: shown.append("dialog")
+        )
+
+        subject.validate_captions()
+
+        assert shown[0][1] == 1
+        assert shown[0][0][0]["title"] == "No text"
+        assert "dialog" not in shown
+
+    def test_the_panel_words(self):
+        from utils.validation_panel import heading_text, position_text
+
+        assert heading_text(5) == "Validation issues"
+        assert heading_text(0) == "No validation issues"
+        assert position_text(1, 5) == "2 of 5"
+
+
+class TestStepping:
+    """
+    Previous and Next keep focus on something that can take it: the button
+    that would go past either end is disabled, and a disabled button drops
+    focus on the page.
+    """
+
+    def panel(self, count):
+        from utils.validation_panel import ValidationPanel
+
+        panel = ValidationPanel.__new__(ValidationPanel)
+        panel.items = [{"caption": None}] * count
+        panel.position = 0
+        panel.previous, panel.next = "previous", "next"
+        panel.focused = []
+        panel.draw = lambda: None
+        panel.focus = lambda element: panel.focused.append(element)
+        return panel
+
+    def test_next_to_the_end_hands_focus_to_previous(self):
+        panel = self.panel(3)
+
+        panel.go_next()
+        assert panel.position == 1 and panel.focused == []
+
+        panel.go_next()
+        assert panel.position == 2 and panel.focused == ["previous"]
+
+    def test_previous_to_the_start_hands_focus_to_next(self):
+        panel = self.panel(3)
+        panel.position = 1
+
+        panel.go_previous()
+
+        assert panel.position == 0 and panel.focused == ["next"]
+
+    def test_the_panel_lives_below_uncertain_words(self):
+        import pathlib
+
+        page = pathlib.Path("pages/srt.py").read_text()
+
+        video = page.index('with ui.element("div").classes("video-frame')
+        uncertain = page.index('ui.label("Uncertain words:")')
+        panel = page.index("editor.validation_panel = ValidationPanel(")
+
+        assert video < uncertain < panel

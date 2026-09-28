@@ -1719,6 +1719,126 @@ theme_styles = """
             in srgb, var(--color-warning-border) 22%, transparent
         );
     }
+    /* The caption whose issue the validation panel is showing. After the
+       invalid tint so it wins over it: every invalid caption is tinted,
+       this one is the one being looked at, so it gets a full outline as
+       well as the rule -- shape, not only colour, says which. */
+    .transcript-cell-reviewing {
+        border-left-color: var(--color-status-error-border);
+        border-left-width: 3px;
+        padding-left: calc(1rem - 2px);
+        box-shadow: inset 0 0 0 2px var(--color-status-error-border);
+    }
+
+    /* ── Validation panel, under the video (issue #138) ── */
+    /* Design B: a stripe down the left and a tinted header in the colour
+       of the issue shown -- the panel's own is-warning / is-error /
+       is-clear class, set per issue -- with the arrows and "2 of 5" as a
+       compact group in the header. Tints are mixes of the status colours,
+       as the editor's own caption tints are, so dark mode follows. */
+    .validation-panel {
+        --vp-tone: var(--color-warning-border);
+        border: 1px solid var(--color-border-subtle);
+        border-left: 5px solid var(--vp-tone);
+        border-radius: 6px;
+        background: var(--color-bg-surface);
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    .validation-panel.is-error {
+        --vp-tone: var(--color-status-error-border);
+    }
+    .validation-panel.is-clear {
+        --vp-tone: var(--color-status-ok-border);
+    }
+    .body--dark .validation-panel {
+        background: var(--color-bg-page);
+    }
+    .validation-panel-head {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 8px 6px 14px;
+        background: color-mix(in srgb, var(--vp-tone) 12%, transparent);
+        border-bottom: 1px solid color-mix(in srgb, var(--vp-tone) 30%, transparent);
+    }
+    .validation-panel-heading {
+        font-size: 0.9375rem;
+        font-weight: 600;
+        flex-grow: 1;
+        outline: none;
+    }
+    .validation-panel-nav {
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+    .validation-panel .validation-panel-step {
+        min-width: 0 !important;
+        width: 2rem;
+        height: 2rem;
+        padding: 0 !important;
+        border: 1px solid var(--color-border-subtle);
+        background: var(--color-bg-surface) !important;
+        color: var(--color-text-primary) !important;
+    }
+    .body--dark .validation-panel .validation-panel-step {
+        background: var(--color-bg-page) !important;
+    }
+    .validation-panel-position {
+        font-size: 0.8125rem;
+        min-width: 3rem;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+    }
+    .validation-panel-body {
+        padding: 12px 16px 14px;
+    }
+    .validation-panel-issue {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+    }
+    /* The kind in small capitals, in the issue's own colour darkened for
+       text: the icon and colour repeat it, the word carries it. */
+    .validation-panel-kind {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 0.75rem;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        color: color-mix(in srgb, var(--vp-tone) 70%, var(--color-text-primary));
+    }
+    .validation-panel-kind .q-icon {
+        font-size: 1rem;
+        color: var(--vp-tone);
+    }
+    .validation-panel-title {
+        font-size: 1.0625rem;
+        font-weight: 600;
+    }
+    .validation-panel-detail {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0 6px;
+        color: var(--color-text-secondary);
+    }
+    .validation-panel .validation-panel-caption {
+        padding: 0 4px !important;
+        min-height: 0 !important;
+        text-decoration: underline;
+        font-weight: 600;
+        color: var(--color-text-primary) !important;
+    }
+    .validation-panel-gone,
+    .validation-panel-clear {
+        font-size: 0.875rem;
+        color: var(--color-text-secondary);
+    }
 
     /* The timing row is not part of the caption's text, so a selection
        dragged across captions must not paint it as though it were: a

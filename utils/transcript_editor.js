@@ -86,7 +86,7 @@ export default {
             @keydown="onControlKeydown($event, block.id, 'speaker')"
           >{{ block.speaker }}</span><span v-if="!subtitleMode" class="transcript-colon">:</span></div><div
           class="transcript-cell"
-          :class="{ 'transcript-cell-active': block.id === activeId, 'transcript-cell-editing': block.id === caretId, 'transcript-cell-invalid': block.invalid, 'transcript-cell-highlighted': block.highlighted }"
+          :class="{ 'transcript-cell-active': block.id === activeId, 'transcript-cell-editing': block.id === caretId, 'transcript-cell-invalid': block.invalid, 'transcript-cell-highlighted': block.highlighted, 'transcript-cell-reviewing': block.id === reviewId }"
           :data-id="block.id"
         ><div
             v-if="!subtitleMode"
@@ -287,6 +287,9 @@ export default {
   props: {
     blocks: { type: Array, default: () => [] },
     activeId: { type: Number, default: -1 },
+    // The caption whose validation issue the panel under the video is
+    // showing (utils/validation_panel.py); -1 when none is.
+    reviewId: { type: Number, default: -1 },
     reviewLabel: { type: String, default: "" },
     editLabel: { type: String, default: "" },
     showEdits: { type: Boolean, default: false },

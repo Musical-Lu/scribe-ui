@@ -118,35 +118,78 @@ class RenderMixin:
         readable text that a viewer will struggle with. Both are worth
         reporting; only one of them means the file is wrong.
 
-        Each entry is {"caption", "errors", "warnings"}, ordered by the
-        caption's own position in the list. `is_valid` is set here as it
-        always was, so the editor's own red rules follow from the same pass.
+        Each entry is {"caption", "errors", "warnings", "items"}, ordered by
+        the caption's own position in the list. `errors` and `warnings` are
+        the one-line messages; `items` holds the same issues one by one for
+        the validation panel (utils/validation_panel.py), each with a short
+        heading naming the rule ("Line exceeds 42 characters"), a detail
+        saying how this caption breaks it ("Line 2 has 48 characters.") and
+        the character offset the caret should land at to fix it -- see
+        validation_items(). `is_valid` is set here as it always was, so the
+        editor's own red rules follow from the same pass.
         """
 
         issues: dict = {}
 
-        def report(caption, message: str, error: bool) -> None:
+        def report(
+            caption,
+            message: str,
+            error: bool,
+            title: str,
+            detail: str,
+            offset: int = 0,
+        ) -> None:
             entry = issues.get(caption.index)
 
             if entry is None:
-                entry = {"caption": caption, "errors": [], "warnings": []}
+                entry = {
+                    "caption": caption,
+                    "errors": [],
+                    "warnings": [],
+                    "items": [],
+                }
                 issues[caption.index] = entry
 
             entry["errors" if error else "warnings"].append(message)
+            entry["items"].append(
+                {
+                    "caption": caption,
+                    "error": error,
+                    "title": title,
+                    "detail": detail,
+                    "offset": offset,
+                }
+            )
             caption.is_valid = False
 
         for caption in self.captions:
             if not caption.text.strip():
-                report(caption, "No text.", error=True)
+                report(
+                    caption,
+                    "No text.",
+                    error=True,
+                    title="No text",
+                    detail="The caption is empty.",
+                )
 
             if caption.get_end_seconds() < caption.get_start_seconds():
-                report(caption, "Ends before it starts.", error=True)
+                report(
+                    caption,
+                    "Ends before it starts.",
+                    error=True,
+                    title="Ends before it starts",
+                    detail=(
+                        f"Starts at {caption.start_time}, "
+                        f"ends at {caption.end_time}."
+                    ),
+                )
 
             # Subtitle guidelines. A transcription's blocks are a speaker's
             # whole turn, with no length to keep to and no viewer reading
             # them off a screen.
             if self.data_format == "srt":
                 lines = caption.text.split("\n")
+                line_start = 0
 
                 for number, line in enumerate(lines, start=1):
                     if len(line) > settings.CHARACTER_LIMIT:
@@ -155,7 +198,16 @@ class RenderMixin:
                             f"Line {number} is {len(line)} characters "
                             f"(max {settings.CHARACTER_LIMIT}).",
                             error=False,
+                            title=(
+                                f"Line exceeds {settings.CHARACTER_LIMIT} "
+                                "characters"
+                            ),
+                            detail=f"Line {number} has {len(line)} characters.",
+                            # Where the line runs past the guideline, which
+                            # is where the break usually wants to go.
+                            offset=line_start + settings.CHARACTER_LIMIT,
                         )
+                    line_start += len(line) + 1
 
                 if len(lines) > settings.MAX_SUBTITLE_LINES:
                     report(
@@ -163,6 +215,8 @@ class RenderMixin:
                         f"{len(lines)} lines "
                         f"(max {settings.MAX_SUBTITLE_LINES}).",
                         error=False,
+                        title=f"More than {settings.MAX_SUBTITLE_LINES} lines",
+                        detail=f"It has {len(lines)} lines.",
                     )
 
                 seconds = caption.get_end_seconds() - caption.get_start_seconds()
@@ -177,6 +231,11 @@ class RenderMixin:
                         f"On screen for {seconds:.2f}s "
                         f"(min {settings.MIN_CAPTION_SECONDS}s).",
                         error=False,
+                        title=(
+                            f"Shorter than {settings.MIN_CAPTION_SECONDS}s "
+                            "on screen"
+                        ),
+                        detail=f"On screen for {seconds:.2f}s.",
                     )
 
         # Timing against the neighbours. Two captions sharing a start time
@@ -184,15 +243,24 @@ class RenderMixin:
         # check ("multiple captions start at the same time") said the same
         # thing again in different words, so one pair of captions could be
         # reported three times over.
-        seen_times = set()
+        seen_times: dict = {}
 
         for caption in self.captions:
             times = (caption.start_time, caption.end_time)
 
             if times in seen_times:
-                report(caption, "Same timing as an earlier caption.", error=True)
-
-            seen_times.add(times)
+                report(
+                    caption,
+                    "Same timing as an earlier caption.",
+                    error=True,
+                    title="Same timing as an earlier caption",
+                    detail=(
+                        "Starts and ends at the same time as caption "
+                        f"{seen_times[times].index}."
+                    ),
+                )
+            else:
+                seen_times[times] = caption
 
         for current, following in zip(self.captions, self.captions[1:]):
             if current.get_end_seconds() > following.get_start_seconds():
@@ -200,14 +268,28 @@ class RenderMixin:
                     current,
                     f"Overlaps caption #{following.index}.",
                     error=True,
+                    title="Overlapping timestamps",
+                    detail=f"Overlaps caption {following.index}.",
                 )
                 report(
                     following,
                     f"Overlaps caption #{current.index}.",
                     error=True,
+                    title="Overlapping timestamps",
+                    detail=f"Overlaps caption {current.index}.",
                 )
 
         return [issues[index] for index in sorted(issues)]
+
+    @staticmethod
+    def validation_items(issues: list) -> list:
+        """
+        The issues one by one, in caption order, for the validation panel to
+        step through with Previous and Next. A caption with several issues
+        comes up once for each -- the panel reviews issues, not captions.
+        """
+
+        return [item for entry in issues for item in entry["items"]]
 
     def validate_captions(self):
         """
@@ -229,7 +311,13 @@ class RenderMixin:
             specific_indices=changed_indices if changed_indices else None
         )
 
-        self.show_validation_report(issues)
+        # The docked panel under the video (issue #138) when the page has
+        # one; the dialog otherwise.
+        panel = getattr(self, "validation_panel", None)
+        if panel is not None:
+            panel.show(self.validation_items(issues), len(self.captions))
+        else:
+            self.show_validation_report(issues)
 
     def show_validation_report(self, issues: list) -> None:
         """

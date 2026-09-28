@@ -37,6 +37,7 @@ from utils.srt import (
     TIMELINE_SHOW_KEY,
 )
 from utils.speech_timeline import SpeechTimeline
+from utils.validation_panel import ValidationPanel
 from utils.transcript_editor import TranscriptEditor
 from utils.video import create_video_proxy
 
@@ -824,3 +825,16 @@ def create() -> None:
                                         "text-sm text-theme-muted review-count"
                                     )
                                     editor.set_flagged_count_element(flagged)
+
+                        # Validation results (issue #138), below the settings
+                        # under the video -- "Uncertain words" last among
+                        # them: one issue at a time with Previous and Next,
+                        # rather than a dialog over the work. Built hidden;
+                        # Validate opens and refills it. Subtitles only, like
+                        # Validate itself.
+                        if data_format == "srt":
+                            editor.validation_panel = ValidationPanel(
+                                transcript,
+                                captions=lambda: editor.captions,
+                                return_focus=lambda: validate_button,
+                            )
