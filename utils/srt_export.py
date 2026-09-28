@@ -389,7 +389,7 @@ class ExportMixin:
                                 originals_label(originals), value=False
                             )
                             ui.label(
-                                "Exactly as it was recorded, as its own download."
+                                "Exactly as it was recorded, as a separate file."
                             ).classes("text-caption").style(
                                 "color: var(--color-text-muted); margin-top: -8px;"
                             )
