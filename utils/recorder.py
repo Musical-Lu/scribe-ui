@@ -36,7 +36,7 @@ with its content hash in the URL so a browser never runs a stale copy.
 import hashlib
 import pathlib
 
-from nicegui import ui
+from nicegui import app, ui
 
 from utils.recording_api import recording_owner
 from utils.token import get_user_info
@@ -44,16 +44,24 @@ from utils.token import get_user_info
 ENGINE_PATH = pathlib.Path(__file__).resolve().parent.parent / "static" / "recorder_engine.js"
 ENGINE_VERSION = hashlib.sha256(ENGINE_PATH.read_bytes()).hexdigest()[:12]
 
+# Served under /record, not /static. Behind the reverse proxy /record has to
+# reach this app already -- the recorder page and its API live there -- while
+# /static is not something the proxy is guaranteed to send here: the engine
+# was the only file on the site with a /static URL (images go through
+# NiceGUI's own routes), and on staging it was answered 404 by something
+# else, which the recorder reports as "The recorder did not load".
+ENGINE_URL = "/record/recorder_engine.js"
+app.add_static_file(local_file=ENGINE_PATH, url_path=ENGINE_URL)
+
 
 def engine_script() -> None:
     """
     Load the engine into the page's head.  A plain blocking script, so it has
-    run before any component that uses it is mounted.
+    run before any component that uses it is mounted. The content hash in
+    the URL means a new engine is never served from a stale cache.
     """
 
-    ui.add_head_html(
-        f'<script src="/static/recorder_engine.js?v={ENGINE_VERSION}"></script>'
-    )
+    ui.add_head_html(f'<script src="{ENGINE_URL}?v={ENGINE_VERSION}"></script>')
 
 
 def current_owner() -> str:

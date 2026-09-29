@@ -63,8 +63,8 @@ def set_attribute(element: ui.element, name: str, value: str) -> ui.element:
     """
     Set one attribute to a value, as a value.
 
-    Never `element.props(f'{name}="{value}"')` with anything not written
-    here: `.props()` parses its string into key=value pairs, so a quote in
+    Never format a value not written here into the string given to
+    `element.props()`: it parses that string into key=value pairs, so a quote in
     the value closes the attribute and whatever follows becomes attributes
     of its own -- and a Drive file name is chosen by whoever named the file,
     which includes anyone sharing one with the reader. `x" onmouseover="..."`

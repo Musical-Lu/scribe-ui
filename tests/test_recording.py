@@ -460,3 +460,18 @@ def test_transcribed_and_untranscribed_files_are_not_exported_together():
     assert "mixed = bool(completed) and len(completed) < len(selected)" in home
     assert "not mixed" in home
     assert "if completed and len(completed) < len(selected):" in common
+
+
+def test_the_engine_is_served_under_record():
+    # /record reaches this app behind the proxy (the recorder page and its
+    # API are there); /static is not guaranteed to, and a 404 for the engine
+    # is "The recorder did not load".
+    from nicegui import app
+
+    from utils import recorder
+
+    assert recorder.ENGINE_URL.startswith("/record/")
+    assert any(
+        getattr(route, "path", None) == recorder.ENGINE_URL for route in app.routes
+    )
+    assert "/static/recorder_engine.js" not in (ROOT / "utils" / "recorder.py").read_text()
