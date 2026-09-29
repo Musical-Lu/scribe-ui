@@ -110,6 +110,7 @@ class TranscriptBody(
         self._props["blocks"] = []
         self._props["activeId"] = -1
         self._props["reviewId"] = -1
+        self._props["reviewError"] = True
         self._props["reviewLabel"] = REVIEW_TOOLTIP
         self._props["editLabel"] = EDIT_TOOLTIP
         self._props["showEdits"] = False
@@ -144,12 +145,14 @@ class TranscriptBody(
         self._props["activeId"] = block_id
         self.update()
 
-    def set_review(self, block_id: int) -> None:
+    def set_review(self, block_id: int, error: bool = True) -> None:
         """
-        Mark the caption the validation panel is showing, or none (-1).
+        Mark the caption the validation panel is showing, or none (-1), in
+        the colour of the issue shown: red for an error, amber for a warning.
         """
 
         self._props["reviewId"] = block_id
+        self._props["reviewError"] = error
         self.update()
 
     def set_follow(self, follow: bool) -> None:
@@ -266,13 +269,14 @@ class TranscriptEditor:
         self.focus(caption.index)
         self.mark_current(caption.index)
 
-    def review(self, caption_index: Optional[int]) -> None:
+    def review(self, caption_index: Optional[int], error: bool = True) -> None:
         """
         Bring the caption the validation panel is on into view and mark it
         as the one being reviewed, or clear that marking (None). The panel
         steps through issues, not captions, so this is not select_caption():
         that toggles, and a second issue in the same caption would have
-        unselected it.
+        unselected it. `error` colours the outline as the panel colours the
+        issue it is showing.
         """
 
         if self.body is None:
@@ -282,7 +286,7 @@ class TranscriptEditor:
             self.body.set_review(-1)
             return
 
-        self.body.set_review(caption_index)
+        self.body.set_review(caption_index, error)
         self.body.scroll_to_block(caption_index)
         self.mark_current(caption_index)
 
@@ -493,6 +497,9 @@ class TranscriptEditor:
                     caption, per_word=self.editor.highlight_word
                 ),
                 "invalid": not caption.is_valid,
+                # Only warnings: marked amber, as the validation panel draws
+                # a warning, rather than an error's red.
+                "warning": not caption.is_valid and not caption.has_error,
                 "highlighted": caption.is_highlighted,
             }
 

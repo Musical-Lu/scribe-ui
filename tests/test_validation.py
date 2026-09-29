@@ -207,6 +207,25 @@ class TestGrouping:
         assert subtitles.captions[0].is_valid is False
         assert [entry["caption"] for entry in issues] == [subtitles.captions[0]]
 
+    def test_a_caption_knows_whether_it_has_an_error(self):
+        """
+        The marking is red for an error and amber for warnings only, the
+        colours the validation panel uses for the same issues.
+        """
+
+        subtitles = editor(
+            caption(1, "00:00:00,000", "00:00:02,000", ""),
+            caption(2, "00:00:02,000", "00:00:02,100"),
+            caption(3, "00:00:03,000", "00:00:05,000"),
+        )
+
+        subtitles.collect_validation_issues()
+        first, second, third = subtitles.captions
+
+        assert first.has_error is True
+        assert (second.is_valid, second.has_error) == (False, False)
+        assert (third.is_valid, third.has_error) == (True, False)
+
 
 class TestSummaryWording:
     """
@@ -424,6 +443,20 @@ class TestCheckingAgain:
 
 
 class TestTheCheckboxes:
+    def test_they_are_drawn_when_there_is_a_choice(self):
+        from utils.validation_panel import filters_wanted
+
+        assert filters_wanted([("overlap", 2), ("length", 1)], set())
+        assert not filters_wanted([("length", 3)], set())
+        assert not filters_wanted([], {"length"})
+
+    def test_a_lone_hidden_kind_can_still_be_shown_again(self):
+        # Hide line length, fix everything else: line length is the only
+        # kind left, and hidden. Without its checkbox nothing could show it.
+        from utils.validation_panel import filters_wanted
+
+        assert filters_wanted([("length", 3)], {"length"})
+
     def test_a_checkbox_only_acts_when_it_disagrees(self):
         from utils.validation_panel import ValidationPanel
 

@@ -79,6 +79,18 @@ def rule_counts(items: list) -> list[tuple[str, int]]:
     return [(rule, counts[rule]) for rule in RULE_LABELS if rule in counts]
 
 
+def filters_wanted(counts: list[tuple[str, int]], hidden: set) -> bool:
+    """
+    Whether the filter checkboxes are drawn: when there is more than one kind
+    to choose between -- or when a kind that is present is hidden, however
+    few kinds there are. Hidden kinds outlive a Validate run, so hiding one
+    kind and fixing the rest left that kind the only one found, hidden, with
+    no checkbox left to show it again.
+    """
+
+    return len(counts) > 1 or any(rule in hidden for rule, _ in counts)
+
+
 def shown_items(items: list, hidden: set) -> list:
     """
     The items whose kind the reader has not hidden, in their own order.
@@ -212,7 +224,7 @@ class ValidationPanel:
             # Which kinds of issue to step through: one toggle per kind
             # found, with its count, below the panel rather than inside it --
             # a setting for the whole review, not part of any one issue.
-            # Only there when there is a choice.
+            # Only there when there is a choice, or a hidden kind to bring back.
             self.filters = (
                 ui.element("div")
                 .classes("validation-panel-filters")
@@ -302,7 +314,7 @@ class ValidationPanel:
 
         self.filters.clear()
         self.checkboxes = {}
-        self.filters.set_visibility(len(counts) > 1)
+        self.filters.set_visibility(filters_wanted(counts, self.hidden))
 
         with self.filters:
             for rule, count in counts:
@@ -419,7 +431,7 @@ class ValidationPanel:
                 # Issues exist; the reader has hidden every kind of them.
                 self.panel.classes(replace="validation-panel w-full is-muted")
                 self.all_clear.set_text(
-                    "Every kind of issue is hidden. Choose one above to see it."
+                    "Every kind of issue is hidden. Choose one below to see it."
                 )
             else:
                 self.panel.classes(replace="validation-panel w-full is-clear")
@@ -454,7 +466,7 @@ class ValidationPanel:
 
         if self.exists(item):
             self.caption_button.set_enabled(True)
-            self.transcript.review(caption.index)
+            self.transcript.review(caption.index, item["error"])
         else:
             self.caption_button.set_enabled(False)
             self.gone.set_visibility(True)

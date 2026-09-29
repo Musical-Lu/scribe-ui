@@ -38,6 +38,10 @@ class SRTCaption:
         self.is_selected = False
         self.is_highlighted = False  # For search highlighting
         self.is_valid = True  # For validation
+        # Whether any issue Validate found is an error rather than a warning;
+        # decides the colour the caption is marked in. Only means anything
+        # while is_valid is False.
+        self.has_error = False
         self.speaker = speaker if speaker else "UNKNOWN"
 
         # Word positions the reader has changed, counted in whitespace
@@ -63,6 +67,7 @@ class SRTCaption:
         new_caption.is_selected = self.is_selected
         new_caption.is_highlighted = self.is_highlighted
         new_caption.is_valid = self.is_valid
+        new_caption.has_error = self.has_error
         # Copied rather than shared: the undo stack holds these snapshots, so
         # undoing a change has to take its marks back with it.
         new_caption.edited_words = set(self.edited_words)

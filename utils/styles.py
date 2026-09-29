@@ -1695,6 +1695,15 @@ theme_styles = """
             in srgb, var(--color-status-error-border) 10%, transparent
         );
     }
+    /* A caption with warnings only -- a subtitle guideline missed, the file
+       itself fine -- is marked amber, as the validation panel draws a
+       warning; red is kept for the errors. */
+    .transcript-cell-invalid.transcript-cell-warning {
+        border-left-color: var(--color-warning-border);
+        background-color: color-mix(
+            in srgb, var(--color-warning-border) 10%, transparent
+        );
+    }
     .transcript-cell-highlighted {
         border-left-color: var(--color-warning-border);
         background-color: color-mix(
@@ -1714,6 +1723,11 @@ theme_styles = """
             in srgb, var(--color-status-error-border) 18%, transparent
         );
     }
+    .body--dark .transcript-cell-invalid.transcript-cell-warning {
+        background-color: color-mix(
+            in srgb, var(--color-warning-border) 18%, transparent
+        );
+    }
     .body--dark .transcript-cell-highlighted {
         background-color: color-mix(
             in srgb, var(--color-warning-border) 22%, transparent
@@ -1728,6 +1742,10 @@ theme_styles = """
         border-left-width: 3px;
         padding-left: calc(1rem - 2px);
         box-shadow: inset 0 0 0 2px var(--color-status-error-border);
+    }
+    .transcript-cell-reviewing.transcript-cell-reviewing-warning {
+        border-left-color: var(--color-warning-border);
+        box-shadow: inset 0 0 0 2px var(--color-warning-border);
     }
 
     /* ── Validation panel, under the video (issue #138) ── */

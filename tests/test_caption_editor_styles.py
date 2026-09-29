@@ -142,6 +142,18 @@ class TestTranscriptCellStates:
 
         assert len({invalid, highlighted, active}) == 3
 
+    def test_warnings_are_amber_as_in_the_validation_panel(self):
+        warning = effective(".transcript-cell-invalid.transcript-cell-warning")
+        reviewing = effective(
+            ".transcript-cell-reviewing.transcript-cell-reviewing-warning"
+        )
+
+        assert warning["border-left-color"] == "var(--color-warning-border)"
+        assert reviewing["border-left-color"] == "var(--color-warning-border)"
+        assert effective(".transcript-cell-invalid")["border-left-color"] == (
+            "var(--color-status-error-border)"
+        )
+
 
 class TestTheCaptionBeingEdited:
     """
