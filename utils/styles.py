@@ -1743,7 +1743,9 @@ theme_styles = """
         padding-left: calc(1rem - 2px);
         box-shadow: inset 0 0 0 2px var(--color-status-error-border);
     }
-    .transcript-cell-reviewing.transcript-cell-reviewing-warning {
+    /* In the caption's own colour -- its highest severity -- not the
+       colour of whichever of its issues the panel is on. */
+    .transcript-cell-reviewing.transcript-cell-warning {
         border-left-color: var(--color-warning-border);
         box-shadow: inset 0 0 0 2px var(--color-warning-border);
     }

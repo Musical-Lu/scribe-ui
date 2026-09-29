@@ -466,7 +466,7 @@ class ValidationPanel:
 
         if self.exists(item):
             self.caption_button.set_enabled(True)
-            self.transcript.review(caption.index, item["error"])
+            self.transcript.review(caption.index)
         else:
             self.caption_button.set_enabled(False)
             self.gone.set_visibility(True)

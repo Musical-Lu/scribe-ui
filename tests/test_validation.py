@@ -217,14 +217,21 @@ class TestGrouping:
             caption(1, "00:00:00,000", "00:00:02,000", ""),
             caption(2, "00:00:02,000", "00:00:02,100"),
             caption(3, "00:00:03,000", "00:00:05,000"),
+            # An error and a warning: the error decides.
+            caption(4, "00:00:06,000", "00:00:06,100", "   "),
         )
 
         subtitles.collect_validation_issues()
-        first, second, third = subtitles.captions
+        first, second, third, fourth = subtitles.captions
 
         assert first.has_error is True
         assert (second.is_valid, second.has_error) == (False, False)
         assert (third.is_valid, third.has_error) == (True, False)
+        rules = {i["rule"] for i in subtitles.validation_items(
+            subtitles.collect_validation_issues()
+        ) if i["caption"] is fourth}
+        assert rules == {"empty", "short"}
+        assert fourth.has_error is True
 
 
 class TestSummaryWording:

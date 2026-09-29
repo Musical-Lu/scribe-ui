@@ -145,7 +145,7 @@ class TestTranscriptCellStates:
     def test_warnings_are_amber_as_in_the_validation_panel(self):
         warning = effective(".transcript-cell-invalid.transcript-cell-warning")
         reviewing = effective(
-            ".transcript-cell-reviewing.transcript-cell-reviewing-warning"
+            ".transcript-cell-reviewing.transcript-cell-warning"
         )
 
         assert warning["border-left-color"] == "var(--color-warning-border)"
