@@ -654,9 +654,10 @@ export default {
       <section v-if="onScribe.length" class="recorder-list" aria-labelledby="recorder-onscribe-heading">
         <h2 id="recorder-onscribe-heading" class="recorder-list-heading">Unfinished recordings on Scribe</h2>
         <p class="recorder-list-note">
-          These reached Scribe but were never finished, and this browser has no record of them.
-          Finishing one puts what Scribe holds in My files; anything that was only on the recording
-          device is not included. Unfinished recordings are deleted from Scribe after two days.
+          These recordings reached Scribe but were not completed, and no matching local recording
+          data is available in this browser. If local audio may still remain in the browser where
+          the recording was made, return to that browser first. Otherwise, you can finish the
+          recording using the audio already received by Scribe.
         </p>
 
         <article v-for="entry in onScribe" :key="entry.id" class="recorder-item">
