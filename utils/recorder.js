@@ -461,7 +461,7 @@ export default {
           <q-card class="recorder-test-card">
             <q-card-section>
               <h2 id="recorder-test-title" class="recorder-help-title">Test audio</h2>
-              <p class="recorder-test-intro">Speak as you will while recording, from where you will be. The meter shows what the microphone hears.</p>
+              <p class="recorder-test-intro">Speak at the same volume and distance from the microphone as you would during the recording. Use the audio level meter to check that your microphone is picking up your voice clearly.</p>
 
               <div class="recorder-setting">
                 <label :for="testSelectId" class="recorder-setting-label">Audio source</label>
