@@ -80,6 +80,10 @@
   // A recording marked as running whose tab has written nothing for this
   // long is not running: that tab crashed or was closed.
   const LIVE_STALE_MS = 15000;
+  // A recording nothing has been recorded into for this long is removed from
+  // the browser, the same 7 days the backend keeps an unfinished recording
+  // (RECORDING_ABANDON_HOURS) and a job keeps its files.
+  const KEEP_MS = 7 * 24 * 60 * 60 * 1000;
   const HEARTBEAT_MS = 5000;
   const RETRY_MIN_MS = 2000;
   const RETRY_MAX_MS = 60000;
@@ -949,6 +953,12 @@
           if (held) liveElsewhere.add(meta.id);
         }
 
+        if (!liveElsewhere.has(meta.id) && now() - meta.updatedAt > KEEP_MS) {
+          await store.deleteRecording(meta.id);
+          api("DELETE", "/" + meta.id).catch(() => {});
+          continue;
+        }
+
         if (gone) {
           meta.state = "stopped";
           meta.interrupted = true;
@@ -1716,6 +1726,7 @@
     PART_CHUNKS: PART_CHUNKS,
     BITRATE: BITRATE,
     LIVE_STALE_MS: LIVE_STALE_MS,
+    KEEP_MS: KEEP_MS,
     createEngine: createEngine,
     memoryStore: memoryStore,
     defaultName: defaultName,

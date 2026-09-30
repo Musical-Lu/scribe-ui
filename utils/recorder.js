@@ -537,6 +537,7 @@ export default {
                 <p>Sunet Scribe saves the recording continuously while you record. When you are online, recorded audio is sent to Sunet Scribe every few seconds.</p>
                 <p>If the connection is lost, recording continues in this browser and uploading resumes when the connection returns.</p>
                 <p>If the browser or device crashes, open this page again. Sunet Scribe will recover anything that had already reached the service or was saved in this browser. While connected, only the last few seconds may be lost.</p>
+                <p>A recording that was never finished is kept on Sunet Scribe for 7 days, and can be finished or deleted from this page during that time. After that it is removed.</p>
               </div>
               <div class="recorder-help-section">
                 <h3 class="recorder-help-heading">Your original recording</h3>
@@ -547,7 +548,7 @@ export default {
                 <p>Make sure everyone knows they are being recorded. Follow your organisation's requirements for permission, information and handling of recordings.</p>
                 <p>While you are online, recorded audio is sent to Sunet Scribe over an encrypted connection and stored encrypted under your account.</p>
                 <p>If audio cannot be sent immediately, it is temporarily stored in this browser. It is encrypted using a key provided by Sunet Scribe while you are signed in and is removed from the browser after it has been successfully sent.</p>
-                <p>Locally stored audio can only be recovered in this browser, and only for a limited time. If you clear this browser's cookies or site data, or do not open Sunet Scribe in this browser for 14 days, the audio can no longer be recovered and is lost. Open this page again as soon as you are back online so the recording can be sent.</p>
+                <p>Locally stored audio can only be recovered in this browser, and only for a limited time. If you clear this browser's cookies or site data, the audio can no longer be recovered and is lost. Audio that has not been sent within 7 days of recording is removed from the browser, the same as everything else Sunet Scribe keeps. Open this page again as soon as you are back online so the recording can be sent.</p>
                 <p>Anyone who can use this browser may be able to access locally stored recordings while you are signed in. Avoid leaving unfinished recordings on a shared device.</p>
                 <p>A downloaded recording is an ordinary file on your device. Store and handle it according to your organisation's requirements.</p>
               </div>

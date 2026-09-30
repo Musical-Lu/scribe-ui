@@ -607,6 +607,32 @@ test("a crashed tab's recording is recovered as interrupted, whole, when it was 
   assert.equal(seconds(ctx.server.file), N + 4);
 });
 
+test("a recording left on the device for 7 days is removed, here and on Scribe", async () => {
+  const ctx = makeEngine();
+  ctx.server.down = true;
+  const session = await record(ctx, N + 2);
+  await session.stop();
+  await settled();
+  const id = session.meta.id;
+  const stoppedAt = storedMeta(ctx, id).updatedAt;
+
+  // Still offline: nothing is sent, so only the age decides.
+  const within = makeEngine({ server: ctx.server, store: ctx.store, clock: stoppedAt + Recorder.KEEP_MS - 60_000 });
+  await within.engine.init();
+  await settled();
+  assert.ok(storedMeta(ctx, id), "still kept just before 7 days");
+  assert.equal(chunksHeld(ctx, id), N + 2);
+
+  const past = makeEngine({ server: ctx.server, store: ctx.store, clock: stoppedAt + Recorder.KEEP_MS + 60_000 });
+  ctx.server.requests.length = 0;
+  await past.engine.init();
+  await settled();
+  assert.equal(storedMeta(ctx, id), undefined);
+  assert.equal(chunksHeld(ctx, id), 0);
+  assert.equal(past.engine.list().find((r) => r.id === id), undefined);
+  assert.ok(ctx.server.requests.includes("DELETE /record/api/" + id));
+});
+
 test("a recording another tab is still writing is left alone", async () => {
   const ctx = makeEngine();
   const session = await record(ctx, N + 3);
