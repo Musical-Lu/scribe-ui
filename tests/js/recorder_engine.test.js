@@ -43,6 +43,9 @@ function fakeServer() {
     status401: false,
     backendDown: false,
     requests: [],
+    types: new Map(), // rid -> the first ?type= a part carried
+    unfinished: [], // what GET /unfinished answers
+    finishBodies: [],
   };
 
   server.fetch = async (url, init) => {
@@ -52,7 +55,12 @@ function fakeServer() {
     if (init.headers["X-Scribe-Recording"] !== "1") return reply(400, {});
     if (server.status401) return reply(401, {});
 
-    const match = url.match(/^\/record\/api\/([0-9a-f]{32})(\/part\/(\d+)|\/finish)?$/);
+    const [where, query] = url.split("?");
+    if (init.method === "GET" && where === "/record/api/unfinished") {
+      return reply(200, { recordings: server.unfinished });
+    }
+
+    const match = where.match(/^\/record\/api\/([0-9a-f]{32})(\/part\/(\d+)|\/finish)?$/);
     if (!match) return reply(404, {});
     const rid = match[1];
     const held = server.parts.get(rid) || new Map();
@@ -66,6 +74,12 @@ function fakeServer() {
     }
 
     if (init.method === "PUT") {
+      const finished = server.done.get(rid);
+      if (finished && Number(match[3]) >= finished.parts) {
+        return reply(422, { detail: "already finished" });
+      }
+      const type = new URLSearchParams(query || "").get("type");
+      if (type && !server.types.has(rid)) server.types.set(rid, type);
       const bytes = Buffer.from(await init.body.arrayBuffer());
       held.set(Number(match[3]), bytes);
       return reply(200, { ok: true });
@@ -73,14 +87,24 @@ function fakeServer() {
 
     if (init.method === "POST") {
       const body = JSON.parse(init.body);
-      if (server.done.has(rid)) return reply(200, { done: server.done.get(rid) });
+      server.finishBodies.push(body);
+      if (server.done.has(rid)) {
+        const finished = server.done.get(rid);
+        if (body.parts > finished.parts) return reply(422, { detail: "already finished" });
+        return reply(200, { done: finished });
+      }
       const missing = [];
       for (let i = 0; i < body.parts; i++) if (!held.has(i)) missing.push(i);
       if (missing.length) return reply(409, { missing: missing });
       if (server.backendDown) return reply(503, { detail: "backend unavailable" });
       server.finishes += 1;
       const file = Buffer.concat(Array.from({ length: body.parts }, (_, i) => held.get(i)));
-      const done = { uuid: "job-" + server.finishes, filename: body.name, bytes: file.length };
+      const done = {
+        uuid: "job-" + server.finishes,
+        filename: body.name,
+        bytes: file.length,
+        parts: body.parts,
+      };
       server.done.set(rid, done);
       server.file = file;
       return reply(200, { done: done });
@@ -670,7 +694,9 @@ test("another user's recordings on the same device are neither shown nor sent", 
   assert.equal(stranger.engine.list().length, 0);
   await stranger.engine.discard(session.meta.id);
   assert.ok(ctx.store.metas.has(session.meta.id), "not the stranger's to discard");
-  assert.equal(ctx.server.requests.length, sent);
+  // Asking what Scribe holds for the stranger themselves is theirs to ask.
+  const about = ctx.server.requests.slice(sent).filter((r) => !r.endsWith("/unfinished"));
+  assert.deepEqual(about, []);
 });
 
 test("discarding an unfinished recording tells the backend too", async () => {
@@ -759,6 +785,84 @@ test("paused time is not counted", async () => {
   await settled();
   const result = await session.stop();
   assert.equal(result.meta.durationMs, 3000);
+});
+
+test("every part says what type of audio it is", async () => {
+  const ctx = makeEngine();
+  const session = await record(ctx, N + 1);
+
+  assert.equal(ctx.server.types.get(session.meta.id), "audio/webm");
+});
+
+test("recordings on Scribe this browser knows nothing about are offered, and only those", async () => {
+  const ctx = makeEngine();
+  const session = await record(ctx, N + 1);
+  await session.stop();
+  await settled();
+  const lost = "e".repeat(32);
+  ctx.server.parts.set(lost, new Map([[0, Buffer.from("x;")], [1, Buffer.from("y;")]]));
+  ctx.server.unfinished = [
+    { id: lost, parts: 2, held: 2, last: 1_700_000_000, mime: "audio/webm" },
+    { id: session.meta.id, parts: 1, held: 1, last: 1_700_000_000, mime: "audio/webm" },
+    { id: "d".repeat(32), parts: 0, held: 1, last: 1_700_000_000, mime: null },
+  ];
+
+  await ctx.engine.refreshOnScribe();
+
+  assert.deepEqual(ctx.engine.onScribe().map((entry) => entry.id), [lost]);
+});
+
+test("a recovered recording is finished with what Scribe holds, and nothing it cannot know", async () => {
+  const ctx = makeEngine();
+  const lost = "e".repeat(32);
+  ctx.server.parts.set(lost, new Map([[0, Buffer.from("x;")], [1, Buffer.from("y;")], [3, Buffer.from("z;")]]));
+  ctx.server.unfinished = [{ id: lost, parts: 2, held: 3, last: 1_700_000_000, mime: "audio/webm" }];
+  await ctx.engine.init();
+  await settled();
+  assert.equal(ctx.engine.onScribe().length, 1, "fetched when the engine starts");
+
+  const done = await ctx.engine.finishOnScribe(lost);
+
+  assert.equal(done.uuid, "job-1");
+  assert.deepEqual(ctx.server.finishBodies.at(-1), { parts: 2 }, "no name, no type: the backend has its own");
+  assert.equal(ctx.server.file.toString(), "x;y;", "up to the gap");
+  assert.deepEqual(ctx.engine.onScribe(), []);
+});
+
+test("a recovered recording can be deleted from Scribe", async () => {
+  const ctx = makeEngine();
+  const lost = "e".repeat(32);
+  ctx.server.parts.set(lost, new Map([[0, Buffer.from("x;")]]));
+  ctx.server.unfinished = [{ id: lost, parts: 1, held: 1, last: 1_700_000_000, mime: null }];
+  await ctx.engine.refreshOnScribe();
+
+  await ctx.engine.discardOnScribe(lost);
+
+  assert.ok(!ctx.server.parts.has(lost));
+  assert.deepEqual(ctx.engine.onScribe(), []);
+});
+
+test("finished from another device while this one held more: what is here is kept", async () => {
+  const ctx = makeEngine();
+  const session = await record(ctx, N + 1);
+  const id = session.meta.id;
+  ctx.server.down = true;
+  for (let i = N + 1; i < N * 2 + 2; i++) {
+    FakeMediaRecorder.last.emit("c" + i + ";");
+    await settle();
+  }
+  await settled();
+  // Meanwhile, the recovery list on another device finishes it with part 0.
+  ctx.server.done.set(id, { uuid: "job-elsewhere", filename: "Recovered recording.webm", parts: 1 });
+  ctx.server.down = false;
+
+  await session.stop();
+  await settled();
+
+  const shown = ctx.engine.list().find((r) => r.id === id);
+  assert.notEqual(shown.state, "uploaded");
+  assert.match(shown.error, /finished from another device/);
+  assert.equal(await plain(ctx, id, N, N * 2 + 2).then((t) => t.split(";").length - 1), N + 2);
 });
 
 test("a default name says when it was recorded", () => {

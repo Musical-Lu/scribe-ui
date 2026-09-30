@@ -534,7 +534,7 @@
         const from = part * PART_CHUNKS;
         const to = Math.min(from + PART_CHUNKS, meta.chunks);
         const data = await readChunks(meta, from, to);
-        await api("PUT", "/" + meta.id + "/part/" + part, new Blob(data, { type: meta.mime }), {
+        await api("PUT", partPath(meta, part), new Blob(data, { type: meta.mime }), {
           "Content-Type": "application/octet-stream",
         });
         await confirmPart(meta, part);
@@ -599,6 +599,7 @@
         } catch (e) {
           /* the status says enough */
         }
+        if (detail === "already finished") throw finishedElsewhere();
         throw new SyncError("refused", detail || "Scribe refused the recording.");
       }
 
@@ -608,6 +609,12 @@
       // different people.
       throw new SyncError("unavailable", "Scribe is not answering right now (" + response.status + ").");
     }
+
+    const finishedElsewhere = () =>
+      new SyncError(
+        "refused",
+        "This recording was finished from another device. What was recorded here after that could not be added to it."
+      );
 
     // The backend holds it now, original and all, so nothing of it stays on
     // this device.  The original is downloaded from Scribe's file list.
@@ -639,6 +646,12 @@
       remember(meta);
     }
 
+    // Every part says what type of audio it is: the backend keeps the first
+    // it hears, for finishing the recording from another device should this
+    // one lose track of it.
+    const partPath = (meta, part) =>
+      "/" + meta.id + "/part/" + part + (meta.mime ? "?type=" + encodeURIComponent(meta.mime) : "");
+
     const lostPart = () =>
       new SyncError("refused", "Part of this recording was lost on Scribe before it was finished.");
 
@@ -667,6 +680,12 @@
       const status = await api("GET", "/" + id);
 
       if (status.done) {
+        // Finished from another device (the recovery list) while this one
+        // held more.  "done" is not "uploaded" then: what is here past that
+        // point is kept, not deleted.
+        if (typeof status.done.parts === "number" && status.done.parts < total) {
+          throw finishedElsewhere();
+        }
         await markUploaded(meta, status.done);
         return "done";
       }
@@ -698,7 +717,7 @@
             Math.min((part + 1) * PART_CHUNKS, meta.chunks)
           );
 
-          await api("PUT", "/" + id + "/part/" + part, new Blob(data, { type: meta.mime }), {
+          await api("PUT", partPath(meta, part), new Blob(data, { type: meta.mime }), {
             "Content-Type": "application/octet-stream",
           });
           have.add(part);
@@ -967,6 +986,7 @@
       initialised = (async () => {
         await refresh();
         kickAll(true);
+        refreshOnScribe();
 
         const again = () => {
           refresh().then(() => kickAll(false), () => {});
@@ -1528,6 +1548,61 @@
       if (meta) api("DELETE", "/" + id).catch(() => {});
     }
 
+    // -- Recordings on Scribe this browser no longer knows --
+
+    // Recordings the backend holds, never finished and quiet for a while,
+    // that this browser has no record of: its storage was wiped, or they
+    // were made on another device.  What the backend holds is all there is
+    // of them -- whatever was only on the recording device is gone -- and
+    // they are finished with a placeholder name and the type the parts
+    // carried, since the reader's own name was encrypted on that device.
+    let onScribe = [];
+
+    async function refreshOnScribe() {
+      let answer;
+      try {
+        answer = await api("GET", "/unfinished");
+      } catch (e) {
+        return onScribe;
+      }
+
+      let known = new Set();
+      try {
+        known = new Set((await store.listMeta()).map((meta) => meta.id));
+      } catch (e) {
+        /* unreadable storage: offered anyway, the backend is the authority */
+      }
+      finishedHere.forEach((_, id) => known.add(id));
+      if (session) known.add(session.meta.id);
+
+      onScribe = ((answer && answer.recordings) || []).filter(
+        (entry) => entry && typeof entry.id === "string" && entry.parts > 0 && !known.has(entry.id)
+      );
+      emit();
+      return onScribe;
+    }
+
+    async function finishOnScribe(id) {
+      const entry = onScribe.find((item) => item.id === id);
+      if (!entry) return null;
+      const answer = await api("POST", "/" + id + "/finish", JSON.stringify({ parts: entry.parts }), {
+        "Content-Type": "application/json",
+      });
+      if (!answer || !answer.done) {
+        throw new SyncError("unavailable", "Scribe gave an unexpected answer.");
+      }
+      onScribe = onScribe.filter((item) => item.id !== id);
+      emit();
+      return answer.done;
+    }
+
+    async function discardOnScribe(id) {
+      if (!onScribe.some((item) => item.id === id)) return;
+      await api("DELETE", "/" + id);
+      onScribe = onScribe.filter((item) => item.id !== id);
+      emit();
+    }
+
     function list() {
       return Array.from(metas.values())
         .concat(Array.from(finishedHere.values()).filter((meta) => !metas.has(meta.id)))
@@ -1569,6 +1644,10 @@
       submit: submit,
       rename: (id, name) => update(id, { name: String(name || "").trim() }),
       discard: discard,
+      onScribe: () => onScribe.slice(),
+      refreshOnScribe: refreshOnScribe,
+      finishOnScribe: finishOnScribe,
+      discardOnScribe: discardOnScribe,
       startRecording: startRecording,
       supported: supported,
       storageEstimate: storageEstimate,

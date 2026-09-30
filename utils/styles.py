@@ -3157,6 +3157,11 @@ theme_styles = """
         line-height: 1.4;
         color: var(--color-text-primary);
     }
+    .recorder-list-note {
+        margin: 0;
+        font-size: 0.85rem;
+        color: var(--color-text-secondary);
+    }
     .recorder-item {
         border: 1px solid var(--color-border-subtle);
         border-radius: 12px;

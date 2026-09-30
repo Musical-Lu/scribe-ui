@@ -162,6 +162,7 @@ async def _backend(
     content: bytes | None = None,
     json: dict | None = None,
     timeout: httpx.Timeout = BACKEND_TIMEOUT,
+    params: dict | None = None,
 ) -> httpx.Response:
     """
     One request to the backend with the session's token, sent once more
@@ -183,6 +184,7 @@ async def _backend(
                     f"{settings.API_URL}/api/v1{path}",
                     content=content,
                     json=json,
+                    params=params,
                     headers=headers,
                 )
         except httpx.HTTPError:
@@ -271,6 +273,22 @@ async def recording_key(request: Request) -> JSONResponse:
     )
 
 
+# Registered ahead of "/{rid}", which would otherwise take "unfinished" for
+# a recording id and refuse it.
+@app.get(API_PREFIX + "/unfinished")
+async def recordings_unfinished(request: Request) -> JSONResponse:
+    """
+    Recordings on Scribe that were never finished and have had nothing sent
+    to them for a while -- for finishing one whose own browser lost track
+    of it (its storage wiped, its device gone).  The backend leaves out a
+    recording still being sent to, so a live one is never offered here.
+    """
+
+    _caller(request)
+
+    return _answer(await _backend("GET", "/recordings"))
+
+
 @app.get(API_PREFIX + "/{rid}")
 async def recording_status(rid: str, request: Request) -> JSONResponse:
     """
@@ -285,7 +303,9 @@ async def recording_status(rid: str, request: Request) -> JSONResponse:
 
 
 @app.put(API_PREFIX + "/{rid}/part/{seq}")
-async def recording_part(rid: str, seq: int, request: Request) -> JSONResponse:
+async def recording_part(
+    rid: str, seq: int, request: Request, type: str | None = None
+) -> JSONResponse:
     _caller(request)
     _rid(rid)
 
@@ -294,7 +314,13 @@ async def recording_part(rid: str, seq: int, request: Request) -> JSONResponse:
 
     data = await _read_part(request)
 
-    return _answer(await _backend("PUT", f"/recordings/{rid}/part/{seq}", content=data))
+    # The audio type, kept by the backend for finishing the recording from
+    # another device.  Checked there against what a recording may be.
+    params = {"type": type[:100]} if type else None
+
+    return _answer(
+        await _backend("PUT", f"/recordings/{rid}/part/{seq}", content=data, params=params)
+    )
 
 
 @app.post(API_PREFIX + "/{rid}/finish")
@@ -312,7 +338,9 @@ async def recording_finish(rid: str, request: Request) -> JSONResponse:
         payload = {
             "parts": int(body.get("parts")),
             "name": str(body.get("name") or "")[:500],
-            "mime": str(body.get("mime") or "")[:100],
+            # None, not "": a finish from the recovery list has no type of
+            # its own, and the backend then uses the one kept with the parts.
+            "mime": str(body.get("mime") or "")[:100] or None,
         }
     except (ValueError, TypeError, AttributeError):
         raise HTTPException(status_code=422, detail="bad request")

@@ -646,6 +646,67 @@ export default {
         </article>
 
       </section>
+
+      <!-- Recordings Scribe holds that this browser knows nothing about:
+           its storage was wiped, or they were made on another device.
+           Offered only once nothing has been sent to them for a while (the
+           backend decides), so one still being recorded never shows here. -->
+      <section v-if="onScribe.length" class="recorder-list" aria-labelledby="recorder-onscribe-heading">
+        <h2 id="recorder-onscribe-heading" class="recorder-list-heading">Unfinished recordings on Scribe</h2>
+        <p class="recorder-list-note">
+          These reached Scribe but were never finished, and this browser has no record of them.
+          Finishing one puts what Scribe holds in My files; anything that was only on the recording
+          device is not included. Unfinished recordings are deleted from Scribe after two days.
+        </p>
+
+        <article v-for="entry in onScribe" :key="entry.id" class="recorder-item">
+          <div class="recorder-item-head">
+            <div class="recorder-item-text">
+              <div class="recorder-item-name">Recovered recording</div>
+              <div class="recorder-item-meta">
+                Last audio received {{ when(entry.last * 1000) }} · about {{ clock(entry.parts * partMs) }}
+              </div>
+              <div v-if="entry.held > entry.parts" class="recorder-item-state is-warn">
+                <q-icon name="warning" size="16px" aria-hidden="true" />
+                Part of it never reached Scribe, so it ends at the gap.
+              </div>
+              <div v-if="onScribeError[entry.id]" class="recorder-item-state is-danger" role="alert">
+                <q-icon name="error" size="16px" aria-hidden="true" />
+                {{ onScribeError[entry.id] }}
+              </div>
+            </div>
+            <q-btn
+              flat
+              no-caps
+              dense
+              :round="discardArmed !== entry.id"
+              :disable="onScribeBusy === entry.id"
+              class="recorder-quiet recorder-discard"
+              :class="{ 'is-armed': discardArmed === entry.id }"
+              icon="delete"
+              :label="discardArmed === entry.id ? 'Press again to delete' : undefined"
+              :aria-label="discardArmed === entry.id ? 'Confirm: delete this recovered recording' : 'Delete recovered recording from ' + when(entry.last * 1000)"
+              @click="discardOnScribe(entry)"
+            >
+              <q-tooltip v-if="discardArmed !== entry.id">Delete</q-tooltip>
+            </q-btn>
+          </div>
+
+          <div class="recorder-item-actions">
+            <q-btn
+              unelevated
+              no-caps
+              class="recorder-primary recorder-small"
+              icon="cloud_done"
+              label="Finish and add to My files"
+              :loading="onScribeBusy === entry.id"
+              :disable="!!onScribeBusy"
+              :aria-label="'Finish the recovered recording from ' + when(entry.last * 1000) + ' and add it to My files'"
+              @click="finishOnScribe(entry)"
+            />
+          </div>
+        </article>
+      </section>
     </div>
   `,
 
@@ -678,6 +739,10 @@ export default {
       nameInputId: "recorder-name-" + Math.random().toString(36).slice(2),
       stopArmed: false,
       discardArmed: null,
+      onScribe: [],
+      onScribeBusy: null,
+      onScribeError: {},
+      partMs: 0,
       freeHours: null,
       helpOpen: false,
       noticeDismissed: false,
@@ -839,6 +904,8 @@ export default {
     redraw() {
       if (!this.engine) return;
       this.items = this.engine.list();
+      this.onScribe = this.engine.onScribe();
+      this.partMs = window.ScribeRecorder.PART_CHUNKS * window.ScribeRecorder.CHUNK_MS;
       const running = this.engine.session();
       this.live = !!running;
 
@@ -1192,6 +1259,44 @@ export default {
       clearTimeout(this.discardTimer);
       this.discardArmed = null;
       this.engine.discard(item.id);
+    },
+
+    async finishOnScribe(entry) {
+      this.onScribeBusy = entry.id;
+      this.onScribeError = Object.assign({}, this.onScribeError, { [entry.id]: "" });
+      try {
+        const done = await this.engine.finishOnScribe(entry.id);
+        if (done) {
+          this.status = "“" + (done.filename || "Recovered recording") + "” is in My files, ready to transcribe.";
+        }
+      } catch (e) {
+        this.onScribeError = Object.assign({}, this.onScribeError, {
+          [entry.id]: (e && e.message) || "Could not finish the recording. Try again.",
+        });
+      } finally {
+        this.onScribeBusy = null;
+      }
+    },
+
+    async discardOnScribe(entry) {
+      if (this.discardArmed !== entry.id) {
+        this.discardArmed = entry.id;
+        clearTimeout(this.discardTimer);
+        this.discardTimer = setTimeout(() => (this.discardArmed = null), 4000);
+        return;
+      }
+      clearTimeout(this.discardTimer);
+      this.discardArmed = null;
+      this.onScribeBusy = entry.id;
+      try {
+        await this.engine.discardOnScribe(entry.id);
+      } catch (e) {
+        this.onScribeError = Object.assign({}, this.onScribeError, {
+          [entry.id]: (e && e.message) || "Could not delete the recording. Try again.",
+        });
+      } finally {
+        this.onScribeBusy = null;
+      }
     },
 
     leaveIfSignedOut() {

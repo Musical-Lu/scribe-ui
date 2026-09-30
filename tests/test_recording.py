@@ -85,6 +85,7 @@ def backend(monkeypatch):
     def handle(request: httpx.Request) -> httpx.Response:
         got["calls"].append((request.method, request.url.path, request.read()))
         got["headers"] = dict(request.headers)
+        got["params"] = dict(request.url.params)
         if got["raise"]:
             raise got["raise"]
         status = got["status"]
@@ -180,6 +181,48 @@ def test_status_finish_and_discard_are_passed_on(backend):
 
     run(recording_api.recording_discard(RID, request(method="DELETE")))
     assert backend["calls"][-1][:2] == ("DELETE", f"/api/v1/recordings/{RID}")
+
+
+def test_a_part_passes_its_audio_type_on_quoted(backend):
+    run(recording_api.recording_part(RID, 0, request(b"aa"), type="audio/webm;codecs=opus"))
+
+    assert backend["calls"][-1][:2] == ("PUT", f"/api/v1/recordings/{RID}/part/0")
+    assert backend["params"] == {"type": "audio/webm;codecs=opus"}
+
+    run(recording_api.recording_part(RID, 1, request(b"bb")))
+    assert backend["params"] == {}
+
+
+def test_unfinished_recordings_are_asked_of_the_backend(backend):
+    listed = [{"id": RID, "parts": 2, "held": 3, "last": 1.0, "mime": "audio/webm"}]
+    backend["answer"] = {"recordings": listed}
+
+    status, body = payload(run(recording_api.recordings_unfinished(request(method="GET"))))
+
+    assert (status, body) == (200, {"recordings": listed})
+    assert backend["calls"][-1][:2] == ("GET", "/api/v1/recordings")
+
+
+def test_the_unfinished_route_is_not_taken_for_a_recording_id():
+    paths = [
+        route.path
+        for route in recording_api.app.routes
+        if getattr(route, "path", "").startswith(recording_api.API_PREFIX + "/")
+        and "GET" in getattr(route, "methods", ())
+    ]
+
+    assert paths.index(recording_api.API_PREFIX + "/unfinished") < paths.index(
+        recording_api.API_PREFIX + "/{rid}"
+    )
+
+
+def test_a_finish_from_the_recovery_list_leaves_the_type_to_the_backend(backend):
+    backend["answer"] = {"done": {"uuid": "job-1", "filename": "Recovered recording.webm"}}
+    finish = request(json.dumps({"parts": 2}).encode(), method="POST")
+
+    run(recording_api.recording_finish(RID, finish))
+
+    assert json.loads(backend["calls"][-1][2]) == {"parts": 2, "name": "", "mime": None}
 
 
 def test_missing_parts_are_passed_back_to_the_browser(backend):
