@@ -1156,7 +1156,7 @@ export default {
         this.name = "";
         this.follow(running);
         this.listDevices();
-        this.status = "Recording. It is sent to Scribe as it is recorded.";
+        this.status = "Recording. Audio is continuously sent to Scribe while you record.";
       } catch (e) {
         this.status = FAILURES[e && e.name] || "Could not start recording: " + ((e && (e.name || e.message)) || e);
       } finally {
